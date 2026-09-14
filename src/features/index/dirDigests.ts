@@ -108,11 +108,26 @@ export function applyDirDigests(manifest: IndexManifest): void {
 	manifest.dirDigests = recomputeDirDigests(manifest.files);
 }
 
-// MVP: пропустить перечитывание файлов с родителем `dir`, если в manifest уже есть dirDigest и набор прямых дочерних файлов + sizes совпадает.
+// Прямой потомок каталога для Merkle skip (size alone недостаточно).
+export type DirRewalkChild = {
+	relative: string;
+	size: number;
+	// Уже проверенный content-hash (или доверенный через size+mtime gate).
+	contentHash?: string;
+	mtimeMs?: number;
+};
+
+/**
+ * Пропустить перечитывание/rechunk прямых детей `dir`, если:
+ * - есть dirDigest;
+ * - набор путей совпадает;
+ * - у каждого файла совпадает content-hash (явно или через size+mtime ↔ record).
+ * Path+size без hash/mtime - недостаточно (контент мог смениться при том же размере).
+ */
 export function canSkipDirRewalk(
 	manifest: IndexManifest,
 	dir: string,
-	filesUnderDir: ReadonlyArray<{ relative: string; size: number }>,
+	filesUnderDir: ReadonlyArray<DirRewalkChild>,
 ): boolean {
 	if (!manifest.dirDigests?.[dir]) {
 		return false;
@@ -126,7 +141,7 @@ export function canSkipDirRewalk(
 		return false;
 	}
 
-	const sizeByPath = new Map(filesUnderDir.map((f) => [f.relative, f.size]));
+	const childByPath = new Map(filesUnderDir.map((f) => [f.relative, f]));
 	for (let i = 0; i < prevPaths.length; i += 1) {
 		const relative = prevPaths[i]!;
 		if (relative !== nowPaths[i]) {
@@ -134,8 +149,25 @@ export function canSkipDirRewalk(
 		}
 
 		const record = manifest.files[relative];
-		const size = sizeByPath.get(relative);
-		if (!record || size === undefined || record.size !== size) {
+		const child = childByPath.get(relative);
+		if (!record || !child || child.size !== record.size) {
+			return false;
+		}
+
+		if (child.contentHash) {
+			if (child.contentHash !== record.hash) {
+				return false;
+			}
+
+			continue;
+		}
+
+		// Без явного hash - только size+mtime gate (доверенный stored content-hash)
+		if (
+			child.mtimeMs === undefined ||
+			record.mtimeMs === undefined ||
+			child.mtimeMs !== record.mtimeMs
+		) {
 			return false;
 		}
 	}

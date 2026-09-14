@@ -7,6 +7,7 @@
 - **Secrets:** единый SecretStorage vault; `webSearchApiKey` больше не в JSON/слоях (migrate + clear в UI); LLM apiKey через тот же vault
 - **MCP:** Reconnect / Refresh tools по серверу, badge connecting, lastConnectedAt; lazy reconnect на call; AbortSignal cancel; `mcpToolResultMaxChars` (default 50000)
 - **Permissions:** opt-in `persistAlwaysAllow` - Always-паттерны переживают reload (workspaceState); список/очистка в Permissions
+- **Index:** Merkle `dirDigests` content-hash skip (size+mtime gate; одного path+size недостаточно); инкрементальные outline/symbols per-file (debounce watcher; full rebuild после fullIndex)
 
 ## 0.4.0 (11 сентября 2026)
 

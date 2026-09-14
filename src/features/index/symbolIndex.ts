@@ -5,10 +5,10 @@ import { getSettings } from '../../core/config/settings';
 import { isProjectEnabled } from '../project/config';
 import { INDEX_DIR_RELATIVE } from './types';
 import { loadManifest } from './store';
-import { parseSymbolIndexJson, type SymbolIndexDocument, type SymbolIndexEntry } from './symbolIndexParse';
+import { parseSymbolIndexJson, applySymbolPathRemove, applySymbolPathUpdate, type SymbolIndexDocument, type SymbolIndexEntry } from './symbolIndexParse';
 
 export type { SymbolIndexDocument, SymbolIndexEntry } from './symbolIndexParse';
-export { parseSymbolIndexJson } from './symbolIndexParse';
+export { parseSymbolIndexJson, applySymbolPathRemove, applySymbolPathUpdate } from './symbolIndexParse';
 
 export const SYMBOL_INDEX_RELATIVE = '.gen/index/symbols.json';
 
@@ -178,6 +178,71 @@ export async function maybeRefreshSymbolIndex(folder: vscodeTypes.WorkspaceFolde
 	} finally {
 		building = false;
 	}
+}
+
+function emptySymbolDoc(): SymbolIndexDocument {
+	return {
+		updatedAt: new Date(0).toISOString(),
+		fileCount: 0,
+		symbols: [],
+	};
+}
+
+async function saveSymbolDoc(folderFs: string, doc: SymbolIndexDocument): Promise<void> {
+	await fs.mkdir(path.join(folderFs, INDEX_DIR_RELATIVE), {
+		recursive: true
+	});
+	await fs.writeFile(symbolsPathForFolder(folderFs), JSON.stringify(doc, null, 2), 'utf8');
+}
+
+// Per-file upsert в symbols.json через LSP DocumentSymbolProvider
+export async function updateSymbolIndexForFile(
+	folder: vscodeTypes.WorkspaceFolder,
+	relative: string,
+	uri: vscodeTypes.Uri,
+): Promise<void> {
+	if (getSettings().indexingEnabled === false) {
+		return;
+	}
+
+	if (!(await isProjectEnabled(folder.uri.fsPath))) {
+		return;
+	}
+
+	const vscode = await loadVscode();
+	const folderFs = folder.uri.fsPath;
+	const prev = (await loadSymbolIndex(folderFs)) ?? emptySymbolDoc();
+	const nextSymbols: SymbolIndexEntry[] = [];
+
+	try {
+		const docSymbols = await vscode.commands.executeCommand<vscodeTypes.DocumentSymbol[]>(
+			'vscode.executeDocumentSymbolProvider',
+			uri,
+		);
+		if (docSymbols?.length) {
+			flattenSymbols(docSymbols, relative, nextSymbols);
+		}
+	} catch {}
+
+	const next = applySymbolPathUpdate(prev, relative, nextSymbols, SYMBOL_INDEX_LIMITS.maxSymbols);
+	await saveSymbolDoc(folderFs, next);
+}
+
+export async function removeSymbolIndexPath(
+	folder: vscodeTypes.WorkspaceFolder,
+	relative: string,
+): Promise<void> {
+	if (getSettings().indexingEnabled === false) {
+		return;
+	}
+
+	const folderFs = folder.uri.fsPath;
+	const prev = await loadSymbolIndex(folderFs);
+	if (!prev?.symbols.some((s) => s.path === relative)) {
+		return;
+	}
+
+	await saveSymbolDoc(folderFs, applySymbolPathRemove(prev, relative));
 }
 
 function scoreSymbol(entry: SymbolIndexEntry, query: string): number {

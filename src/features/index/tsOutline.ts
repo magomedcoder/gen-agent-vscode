@@ -5,10 +5,10 @@ import { getSettings } from '../../core/config/settings';
 import { isProjectEnabled } from '../project/config';
 import { listIndexableFiles, readIndexableText } from './scanner';
 import { INDEX_DIR_RELATIVE } from './types';
-import { isJsLikeOutlinePath, parseOutlineDocumentJson, parseRegexOutlineFallback, parseTsOutline, searchOutlineEntries, summarizeOutlineForPath, type OutlineDocument, type OutlineEntry } from './tsOutlineParse';
+import { isJsLikeOutlinePath, parseOutlineDocumentJson, parseRegexOutlineFallback, parseTsOutline, searchOutlineEntries, summarizeOutlineForPath, applyOutlinePathRemove, applyOutlinePathUpdate, type OutlineDocument, type OutlineEntry } from './tsOutlineParse';
 
 export type { OutlineDocument, OutlineEntry } from './tsOutlineParse';
-export { isJsLikeOutlinePath, parseOutlineDocumentJson, parseRegexOutlineFallback, parseTsOutline, scoreOutlineQuery, searchOutlineEntries, summarizeOutlineForPath } from './tsOutlineParse';
+export { isJsLikeOutlinePath, parseOutlineDocumentJson, parseRegexOutlineFallback, parseTsOutline, scoreOutlineQuery, searchOutlineEntries, summarizeOutlineForPath, applyOutlinePathRemove, applyOutlinePathUpdate } from './tsOutlineParse';
 
 export const OUTLINE_INDEX_RELATIVE = '.gen/index/outline.json';
 
@@ -117,6 +117,78 @@ export async function maybeRefreshOutlineIndex(folder: vscode.WorkspaceFolder): 
 	try {
 		await rebuildOutlineIndex(folder);
 	} catch {}
+}
+
+function emptyOutlineDoc(): OutlineDocument {
+	return {
+		updatedAt: new Date(0).toISOString(),
+		fileCount: 0,
+		entries: [],
+	};
+}
+
+function isOutlineablePath(relative: string): boolean {
+	return isJsLikeOutlinePath(relative) || /\.(py|go|rs|java|kt|rb)$/i.test(relative);
+}
+
+// Per-file upsert в outline.json (без полного rebuild)
+export async function updateOutlineIndexForFile(
+	folder: vscode.WorkspaceFolder,
+	relative: string,
+	uri: vscode.Uri,
+): Promise<void> {
+	if (getSettings().indexingEnabled === false) {
+		return;
+	}
+
+	if (!(await isProjectEnabled(folder.uri.fsPath))) {
+		return;
+	}
+
+	const folderFs = folder.uri.fsPath;
+	const prev = (await loadOutlineIndex(folderFs)) ?? emptyOutlineDoc();
+
+	if (!isOutlineablePath(relative)) {
+		if (prev.entries.some((e) => e.path === relative)) {
+			await saveOutlineIndex(folderFs, applyOutlinePathRemove(prev, relative));
+		}
+
+		return;
+	}
+
+	let nextEntries: OutlineEntry[] = [];
+	try {
+		const text = await readIndexableText(uri);
+		if (text) {
+			const clipped = text.length > OUTLINE_INDEX_LIMITS.maxFileBytes
+				? text.slice(0, OUTLINE_INDEX_LIMITS.maxFileBytes)
+				: text;
+			nextEntries = extractOutlineForFile(relative, clipped);
+		}
+	} catch {
+		nextEntries = [];
+	}
+
+	const next = applyOutlinePathUpdate(prev, relative, nextEntries, OUTLINE_INDEX_LIMITS.maxEntries);
+	await saveOutlineIndex(folderFs, next);
+}
+
+// Удалить путь из outline.json
+export async function removeOutlineIndexPath(
+	folder: vscode.WorkspaceFolder,
+	relative: string,
+): Promise<void> {
+	if (getSettings().indexingEnabled === false) {
+		return;
+	}
+
+	const folderFs = folder.uri.fsPath;
+	const prev = await loadOutlineIndex(folderFs);
+	if (!prev?.entries.some((e) => e.path === relative)) {
+		return;
+	}
+
+	await saveOutlineIndex(folderFs, applyOutlinePathRemove(prev, relative));
 }
 
 export async function findInOutlineIndex(

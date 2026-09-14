@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { parseTsOutline, parseRegexOutlineFallback, isJsLikeOutlinePath, scoreOutlineQuery, searchOutlineEntries, summarizeOutlineForPath } from '../features/index/tsOutlineParse.js';
+import { parseTsOutline, parseRegexOutlineFallback, isJsLikeOutlinePath, scoreOutlineQuery, searchOutlineEntries, summarizeOutlineForPath, applyOutlinePathUpdate, applyOutlinePathRemove, type OutlineDocument } from '../features/index/tsOutlineParse.js';
 
 suite('tsOutlineParse', () => {
 	test('isJsLikeOutlinePath', () => {
@@ -78,5 +78,45 @@ import { x } from './x';
 		assert.ok(summary?.includes('Widget'), summary);
 		assert.ok(summary?.includes('helper'), summary);
 		assert.ok(!summary?.includes('import'), summary);
+	});
+
+	test('applyOutlinePathUpdate / remove - per-file без полного rebuild', () => {
+		const base: OutlineDocument = {
+			updatedAt: '',
+			fileCount: 2,
+			entries: [
+				{
+					name: 'A',
+					kind: 'class',
+					path: 'a.ts',
+					startLine: 1,
+					endLine: 2
+				},
+				{
+					name: 'B',
+					kind: 'function',
+					path: 'b.ts',
+					startLine: 1,
+					endLine: 2
+				},
+			],
+		};
+		const updated = applyOutlinePathUpdate(base, 'a.ts', [
+			{
+				name: 'A2',
+				kind: 'class',
+				path: 'a.ts',
+				startLine: 1,
+				endLine: 5
+			}
+		], 12_000);
+		assert.strictEqual(updated.entries.filter((e) => e.path === 'a.ts').length, 1);
+		assert.strictEqual(updated.entries.find((e) => e.path === 'a.ts')?.name, 'A2');
+		assert.ok(updated.entries.some((e) => e.path === 'b.ts'));
+		assert.strictEqual(updated.fileCount, 2);
+
+		const removed = applyOutlinePathRemove(updated, 'b.ts');
+		assert.ok(!removed.entries.some((e) => e.path === 'b.ts'));
+		assert.strictEqual(removed.fileCount, 1);
 	});
 });

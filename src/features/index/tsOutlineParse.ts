@@ -352,3 +352,36 @@ export function parseOutlineDocumentJson(raw: string): OutlineDocument | undefin
 		return undefined;
 	}
 }
+
+function recountOutlineFiles(entries: OutlineEntry[]): number {
+	return new Set(entries.map((e) => e.path)).size;
+}
+
+// Инкрементально заменить entries одного файла (или убрать путь, если next пуст)
+export function applyOutlinePathUpdate(
+	doc: OutlineDocument,
+	relative: string,
+	nextEntries: OutlineEntry[],
+	maxEntries: number,
+): OutlineDocument {
+	const kept = doc.entries.filter((e) => e.path !== relative);
+	const merged = nextEntries.length > 0 ? [...kept, ...nextEntries] : kept;
+	const entries = merged.slice(0, Math.max(0, maxEntries));
+	return {
+		updatedAt: new Date().toISOString(),
+		fileCount: recountOutlineFiles(entries),
+		entries,
+	};
+}
+
+export function applyOutlinePathRemove(
+	doc: OutlineDocument,
+	relative: string,
+): OutlineDocument {
+	const entries = doc.entries.filter((e) => e.path !== relative);
+	return {
+		updatedAt: new Date().toISOString(),
+		fileCount: recountOutlineFiles(entries),
+		entries,
+	};
+}

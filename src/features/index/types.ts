@@ -14,6 +14,8 @@ export interface IndexFileRecord {
 	hash: string;
 	size: number;
 	chunkIds: string[];
+	// mtime из FileStat; быстрый gate перед content-hash (опционально для старых манифестов)
+	mtimeMs?: number;
 }
 
 export interface IndexManifest {

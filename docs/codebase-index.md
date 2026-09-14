@@ -14,11 +14,11 @@ The agent searches it via the `codebase_search` tool (trigrams), without sending
 ## How it works
 
 - The index is written to `.gen/index/manifest.json` (files, chunks, trigrams, **dirDigests** Merkle map).
-- On update, ancestor directory digests are recomputed; unchanged dirs can skip re-read when path set + sizes match (MVP).
+- On update, ancestor directory digests are recomputed; unchanged dirs skip re-read when paths + **content-hash** match (size+mtime gate trusts the stored hash; size alone is not enough).
 - LSP **symbol index** (optional cache): `.gen/index/symbols.json` via `vscode.executeDocumentSymbolProvider`. Used by `find_symbol` / `find_code` intent `symbol` and `@symbols`.
 - **TS/JS outline** (no Tree-sitter): `.gen/index/outline.json` via TypeScript `createSourceFile` (classes / functions / imports). Other languages use a cheap regex fallback. Also exposed via `find_symbol` (`source: outline|all`).
 - `.gen/` is not indexed (same for `.git`, `node_modules` via ignore).
-- On file change, only that file is reindexed (content-hash compare).
+- On file change, only that file is reindexed (content-hash compare); outline/symbols update **per-file** (debounced), full rebuild only after a complete index pass.
 - `codebase_search` results are fragments (path, lines, snippet, score).
 - In chat: `@file`, `@folder`, `@codebase`, `@map`, `@symbols` inject context (see [chat.md](chat.md)).
 
