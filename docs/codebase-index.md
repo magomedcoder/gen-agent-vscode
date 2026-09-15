@@ -38,6 +38,16 @@ Call hierarchy / “who calls Y”: tool `find_references` (LSP reference + defi
 3. In Agent mode, call `codebase_search` with `query` (symbol, phrase, path). Prefer `find_code` / `find_symbol` / `pack_context` / `similar_code` for hybrid retrieval.
 4. For exact line grep - `grep` (paths via `glob`).
 
+### Eval / CI (retrieval)
+
+Offline quality gate (no remote embeddings): `src/test/eval/retrieval.eval.ts` + pure metrics in `src/features/index/retrievalMetrics.ts` (precision@k, hit-rate, simpleScore). Permissions/confirm smoke: `src/test/eval/permissionsConfirm.eval.ts`.
+
+```bash
+npm run check-types
+npm test -- --grep eval
+# or: npm run test:eval
+```
+
 ### `.gen/` directories (scaffold)
 
 On project enable or `/init`, these are created if missing: `agents/`, `commands/`, `plugins/`, `skills/`, `tools/`, `references/`, `plans/` - plus a short `.gen/README.md` and `.gitkeep` in empty dirs. Existing files are never overwritten. `references.json` is created on demand, not during scaffold.

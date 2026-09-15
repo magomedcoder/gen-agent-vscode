@@ -39,7 +39,7 @@ import type { DiffHunkPayload } from '../agent/diff';
 import { revertHunkInText } from '../agent/diff';
 import { pathExists, resolveWorkspacePath } from '../agent/workspacePath';
 import { startGitSyncAutoKeep } from './gitSyncKeep';
-import { customToSlashCommand, discoverCustomCommands, expandCommandTemplate } from '../project/customCommands';
+import { customToSlashCommand, discoverCustomCommands, expandCommandTemplate, validateCommandArgs } from '../project/customCommands';
 import type { CustomCommand } from '../project/customCommands';
 import { getGenRulesManager } from '../project/genrules';
 import { formatPersonaAppendix, resolvePersona } from '../project/personas';
@@ -756,6 +756,7 @@ export class ChatSession {
 		hint?: string;
 		variant?: PendingConfirm['variant'];
 		applyLabel?: string;
+		skipLabel?: string;
 		rejectLabel?: string;
 		suggestion?: string;
 		allowAlways?: boolean;
@@ -763,6 +764,7 @@ export class ChatSession {
 		const sid = sessionId ?? this.sessions.getCurrentSessionId();
 		this.focusSession(sid);
 
+		// Не плодим вторую карточку: предыдущий awaiting_confirm закрываем abort
 		if (this.pendingConfirm) {
 			this.settleConfirm('abort');
 		}
@@ -778,7 +780,7 @@ export class ChatSession {
 				hint: request.hint ?? vscode.l10n.t('confirm.panelHint'),
 				variant,
 				applyLabel: request.applyLabel ?? vscode.l10n.t('agent.confirmApply'),
-				skipLabel: vscode.l10n.t('agent.confirmSkip'),
+				skipLabel: request.skipLabel ?? vscode.l10n.t('agent.confirmSkip'),
 				stopLabel: vscode.l10n.t('agent.confirmStop'),
 				rejectLabel: request.rejectLabel ?? vscode.l10n.t('comment.reject'),
 				alwaysLabel: vscode.l10n.t('agent.confirmAlways'),
@@ -1621,6 +1623,16 @@ export class ChatSession {
 			if (slash.custom) {
 				const custom = this.customCommands.find((c) => c.name === slash.command);
 				if (!custom) {
+					return;
+				}
+
+				const argsCheck = validateCommandArgs(custom.body, slash.rest);
+				if (!argsCheck.ok) {
+					this.append({
+						id: messageId(),
+						role: 'assistant',
+						content: `/${custom.name}: ${argsCheck.message}${custom.argumentsHint ? ` (${custom.argumentsHint})` : ''}`,
+					});
 					return;
 				}
 

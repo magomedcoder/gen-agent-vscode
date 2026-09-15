@@ -38,6 +38,16 @@ Call hierarchy / «кто вызывает Y»: tool `find_references` (LSP refe
 3. В режиме Agent вызвать `codebase_search` с `query` (символ, фраза, путь). Предпочтительнее `find_code` / `find_symbol` / `pack_context` / `similar_code`.
 4. Для точного grep по строке - `grep` (пути через `glob`).
 
+### Eval / CI (retrieval)
+
+Offline gate качества (без remote embeddings): `src/test/eval/retrieval.eval.ts` + pure-метрики в `src/features/index/retrievalMetrics.ts` (precision@k, hit-rate, simpleScore). Smoke permissions/confirm: `src/test/eval/permissionsConfirm.eval.ts`.
+
+```bash
+npm run check-types
+npm test -- --grep eval
+# или: npm run test:eval
+```
+
 ### Каталоги `.gen/` (scaffold)
 
 При enable проекта или `/init` создаются (если ещё нет): `agents/`, `commands/`, `plugins/`, `skills/`, `tools/`, `references/`, `plans/` - плюс краткий `.gen/README.md` и `.gitkeep` в пустых каталогах. Существующие файлы не перезаписываются. `references.json` появляется по требованию, не при scaffold.

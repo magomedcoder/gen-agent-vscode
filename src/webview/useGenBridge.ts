@@ -315,6 +315,14 @@ export function useGenBridge() {
 		vscodeApi.postMessage({ type: 'loadIndexStatus' });
 	}, []);
 
+	const cancelIndex = useCallback(() => {
+		vscodeApi.postMessage({ type: 'cancelIndex' });
+	}, []);
+
+	const repairIndex = useCallback(() => {
+		vscodeApi.postMessage({ type: 'repairIndex' });
+	}, []);
+
 	const loadHooks = useCallback(() => {
 		setHooksStatus(undefined);
 		vscodeApi.postMessage({ type: 'loadHooks' });
@@ -399,6 +407,8 @@ export function useGenBridge() {
 		mcpOAuthLogout,
 		mcpOAuthDebug,
 		loadIndexStatus,
+		cancelIndex,
+		repairIndex,
 		loadHooks,
 		saveHooks,
 		openHooksFile,

@@ -19,6 +19,7 @@ export interface ToolContext {
 		allowAlways?: boolean;
 		variant?: 'agent' | 'binary';
 		applyLabel?: string;
+		skipLabel?: string;
 		rejectLabel?: string;
 	}): Promise<ConfirmChoice>;
 	revealFile?(uri: Uri): Promise<void>;

@@ -11,22 +11,31 @@ export function abortTurn(): never {
 	throw err;
 }
 
+export type ConfirmOrSkipOpts = {
+	suggestion?: string;
+	allowAlways?: boolean;
+	applyLabel?: string;
+	skipLabel?: string;
+	rejectLabel?: string;
+	hint?: string;
+};
+
 export async function confirmOrSkip(
 	ctx: ToolContext,
 	title: string,
 	detail?: string,
-	opts?: { suggestion?: string; allowAlways?: boolean },
+	opts?: ConfirmOrSkipOpts,
 ): Promise<ToolResult | undefined> {
 	throwIfAborted(ctx.signal);
-	const ext = ctx as ToolContext & { 
+	const ext = ctx as ToolContext & {
 		skipConfirm?: boolean
 		forceConfirm?: boolean
 	};
-	// forceConfirm (Plan shell ask) перекрывает autoApprove / skipConfirm
+	// forceConfirm (Plan shell ask / review diff) перекрывает autoApprove / skipConfirm
 	if (!ext.forceConfirm && (ext.skipConfirm || getSettings().autoApprove)) {
 		return undefined;
 	}
-	
+
 	if (!ctx.confirm) {
 		return {
 			ok: false,
@@ -50,8 +59,12 @@ export async function confirmOrSkip(
 		void Promise.resolve(ctx.confirm!({
 			title,
 			detail: detail ? previewText(detail) : undefined,
+			hint: opts?.hint,
 			suggestion: opts?.suggestion,
 			allowAlways: opts?.allowAlways,
+			applyLabel: opts?.applyLabel,
+			skipLabel: opts?.skipLabel,
+			rejectLabel: opts?.rejectLabel,
 		})).then((value) => {
 			ctx.signal?.removeEventListener('abort', onAbort);
 			resolve(value);
@@ -81,14 +94,21 @@ export async function confirmOrSkip(
 	abortTurn();
 }
 
-export async function confirmAlwaysOrSkip(ctx: ToolContext, title: string, detail?: string): Promise<ToolResult | undefined> {
+export async function confirmAlwaysOrSkip(
+	ctx: ToolContext,
+	title: string,
+	detail?: string,
+	opts?: Omit<ConfirmOrSkipOpts, 'allowAlways'>,
+): Promise<ToolResult | undefined> {
 	const forceConfirm = (ctx as ToolContext & { forceConfirm?: boolean }).forceConfirm;
 	if (!forceConfirm && getSettings().autoApprove) {
 		return undefined;
 	}
 
-	const suggestion = (ctx as ToolContext & { suggestAlwaysPattern?: string }).suggestAlwaysPattern;
+	const suggestion = opts?.suggestion
+		?? (ctx as ToolContext & { suggestAlwaysPattern?: string }).suggestAlwaysPattern;
 	return confirmOrSkip(ctx, title, detail, {
+		...opts,
 		allowAlways: true,
 		suggestion,
 	});

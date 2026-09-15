@@ -94,6 +94,8 @@ export function App() {
 		mcpOAuthLogout,
 		mcpOAuthDebug,
 		loadIndexStatus,
+		cancelIndex,
+		repairIndex,
 		loadHooks,
 		saveHooks,
 		openHooksFile,
@@ -158,6 +160,8 @@ export function App() {
 				onMcpOAuthLogout={mcpOAuthLogout}
 				onMcpOAuthDebug={mcpOAuthDebug}
 				onLoadIndexStatus={loadIndexStatus}
+				onCancelIndex={cancelIndex}
+				onRepairIndex={repairIndex}
 				onLoadHooks={loadHooks}
 				onSaveHooks={saveHooks}
 				onOpenHooksFile={openHooksFile}

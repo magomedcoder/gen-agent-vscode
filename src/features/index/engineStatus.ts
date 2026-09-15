@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { getSettings } from '../../core/config/settings';
 import type { GenSettings } from '../../core/config/types';
 import { getIndexManagerInstance } from './IndexManager';
-import { loadManifest } from './store';
+import { inspectManifest, loadManifest } from './store';
 import type { IndexProgress } from './types';
 
 /**
@@ -21,6 +21,11 @@ export interface IndexEngineStatus {
 	chunkCount?: number;
 	updatedAt?: string;
 	lastError?: string;
+	partialErrors?: string[];
+	// Битый JSON или несовместимый version манифеста
+	corrupt?: boolean;
+	// Есть файлы, но dirDigests пуст - нужен Repair
+	missingDirDigests?: boolean;
 }
 
 // Приоритет: remote (embeddingsBaseUrl)  иначе CPU trigram
@@ -45,6 +50,27 @@ export async function collectIndexEngineStatus(): Promise<IndexEngineStatus> {
 	let updatedAt = progress?.updatedAt;
 	let lastError = progress?.lastError;
 	let progressState = progress?.state;
+	const partialErrors = progress?.partialErrors;
+	let corrupt = false;
+	let missingDirDigests = false;
+
+	if (folderFs) {
+		try {
+			const probe = await inspectManifest(folderFs);
+			corrupt = probe.corrupt;
+			missingDirDigests = probe.missingDirDigests;
+			if (probe.corrupt && (!progressState || progressState === 'idle' || progressState === 'ready')) {
+				progressState = 'error';
+				lastError = lastError || `Corrupt index manifest (${probe.repairReason ?? 'invalid'})`;
+			} else if (
+				probe.missingDirDigests &&
+				(!progressState || progressState === 'idle' || progressState === 'ready') &&
+				!lastError
+			) {
+				lastError = 'Missing dirDigests - Repair recommended';
+			}
+		} catch {}
+	}
 
 	if (folderFs && (!updatedAt || !fileCount)) {
 		try {
@@ -70,5 +96,8 @@ export async function collectIndexEngineStatus(): Promise<IndexEngineStatus> {
 		chunkCount,
 		updatedAt,
 		lastError,
+		partialErrors,
+		corrupt,
+		missingDirDigests,
 	};
 }

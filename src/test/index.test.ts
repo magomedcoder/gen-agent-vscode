@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import { chunkFileContent } from '../features/index/chunk.js';
 import { canSkipDirRewalk, recomputeDirDigests } from '../features/index/dirDigests.js';
 import { contentHash } from '../features/index/hash.js';
+import { createIndexAbortError, IndexAbortFlag, isIndexAbortError, needsManifestRepair, parseManifestJson, repairManifestInMemory, summarizePartialErrors } from '../features/index/manifestParse.js';
 import { buildTrigramIndex, searchTrigrams, tokenize } from '../features/index/trigram.js';
 import type { IndexManifest } from '../features/index/types.js';
 import { parseSymbolIndexJson, applySymbolPathUpdate, applySymbolPathRemove } from '../features/index/symbolIndexParse.js';
@@ -302,5 +303,100 @@ suite('trigram search', () => {
 	test('tokenize отбрасывает короткие слова', () => {
 		assert.ok(tokenize('a bb ccc').includes('ccc'));
 		assert.ok(!tokenize('a bb').includes('bb'));
+	});
+});
+
+suite('manifestParse / abort', () => {
+	test('parseManifestJson: битый JSON -> invalid_json', () => {
+		const r = parseManifestJson('{not json');
+		assert.strictEqual(r.ok, false);
+		if (!r.ok) {
+			assert.strictEqual(r.reason, 'invalid_json');
+		}
+	});
+
+	test('parseManifestJson: bad version -> bad_version', () => {
+		const r = parseManifestJson(JSON.stringify({ version: 99, files: {}, chunks: {}, trigrams: {} }));
+		assert.strictEqual(r.ok, false);
+		if (!r.ok) {
+			assert.strictEqual(r.reason, 'bad_version');
+		}
+	});
+
+	test('parseManifestJson: missing dirDigests при непустых files', () => {
+		const r = parseManifestJson(
+			JSON.stringify({
+				version: 1,
+				updatedAt: '2020-01-01T00:00:00.000Z',
+				files: {
+					'a.ts': {
+						hash: 'h',
+						size: 1,
+						chunkIds: []
+					}
+				},
+				chunks: {},
+				trigrams: {},
+			}),
+		);
+		assert.strictEqual(r.ok, true);
+		if (r.ok) {
+			assert.strictEqual(r.missingDirDigests, true);
+			assert.ok(needsManifestRepair(r));
+		}
+	});
+
+	test('repairManifestInMemory: corrupt -> empty; missing digests -> recompute', () => {
+		const corrupt = repairManifestInMemory({
+			ok: false,
+			reason: 'invalid_json'
+		});
+		assert.strictEqual(corrupt.reason, 'invalid_json');
+		assert.deepStrictEqual(Object.keys(corrupt.manifest.files), []);
+
+		const parsed = parseManifestJson(
+			JSON.stringify({
+				version: 1,
+				updatedAt: '2020-01-01T00:00:00.000Z',
+				files: {
+					'src/a.ts': {
+						hash: 'h1',
+						size: 1,
+						chunkIds: []
+					},
+					'src/b.ts': {
+						hash: 'h2',
+						size: 1,
+						chunkIds: []
+					},
+				},
+				chunks: {},
+				trigrams: {},
+			}),
+		);
+		assert.ok(parsed.ok);
+		const fixed = repairManifestInMemory(parsed);
+		assert.strictEqual(fixed.reason, 'missing_dir_digests');
+		assert.ok(fixed.manifest.dirDigests['']);
+		assert.ok(fixed.manifest.dirDigests['src']);
+	});
+
+	test('IndexAbortFlag: abort + throwIfAborted', () => {
+		const flag = new IndexAbortFlag();
+		assert.strictEqual(flag.aborted, false);
+		flag.throwIfAborted();
+		flag.abort();
+		assert.strictEqual(flag.aborted, true);
+		assert.throws(() => flag.throwIfAborted(), (err: unknown) => isIndexAbortError(err));
+		assert.ok(isIndexAbortError(createIndexAbortError()));
+	});
+
+	test('summarizePartialErrors', () => {
+		assert.strictEqual(summarizePartialErrors([]), '');
+		const one = summarizePartialErrors(['a.ts: fail']);
+		assert.ok(one.includes('1'));
+		assert.ok(one.includes('a.ts'));
+		const many = summarizePartialErrors(['1', '2', '3', '4'], 3);
+		assert.ok(many.includes('+1'));
 	});
 });

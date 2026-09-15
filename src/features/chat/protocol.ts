@@ -157,7 +157,15 @@ export interface ChatViewState {
 	todos?: ChatTodoItem[];
 	project?: ChatProjectStatus;
 	// Кастомные slash из `.gen/commands` для автодополнения Composer
-	customSlashCommands?: Array<{ id: string; name: string; detail?: string; mode?: ChatMode }>;
+	customSlashCommands?: Array<{
+		id: string;
+		name: string;
+		detail?: string;
+		mode?: ChatMode;
+		needsArgs?: boolean;
+		argsHint?: string;
+		minPositionalArgs?: number;
+	}>;
 	// Мягкая пауза агента (лимит итераций) - Continue / Stop в UI
 	agentPaused?: AgentPausedState;
 	// Id tool, который сейчас выполняется (для per-tool kill)
@@ -277,6 +285,8 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'mcpOAuthLogout'; serverName: string }
 	| { type: 'mcpOAuthDebug'; serverName: string }
 	| { type: 'loadIndexStatus' }
+	| { type: 'cancelIndex' }
+	| { type: 'repairIndex' }
 	| { type: 'loadHooks' }
 	| { type: 'saveHooks'; beforeSubmit: string[]; beforeShell: string[]; sessionDiff: string[]; sessionCompacting: string[]; shellEnv: string[]; fileWatcher: string[]; }
 	| { type: 'openHooksFile' }

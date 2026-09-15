@@ -13,6 +13,11 @@
 - **Tools:** `pack_context` / `similar_code` - budget токенов (`max_tokens` / `maxTokens`) с eviction низкого score; provenance в каждом hit (path, range, tool, reason, score, estimatedTokens); у `pack_context` в JSON есть `hits` (поле `text` сохранено)
 - **Tools:** `find_references` multi-root (`folder`/`root`), опциональный path (workspace symbols), paging `limit`/`offset`/`page` + `total`/`hasMore`/`nextOffset`
 - **Mentions:** пути с пробелами через кавычки / backticks (`@file "my dir/a.ts"`, `@file:"..."`, `` @file:`...` ``); autocomplete и paste квотят такие пути; unquoted без изменений
+- **Permissions:** policy `review` для edits - unified diff в ConfirmCard до Apply (Accept / Reject / Always); больше не heuristic allow для «безопасных» путей; `autoApprove` не пропускает review
+- **Index UI:** отмена идущей fullIndex (состояние `cancelled`); partial failure по файлам с сохранением успешного + `partialErrors`; Repair/Rebuild для corrupt манифеста / missing `dirDigests` (Settings -> Agent -> Indexing)
+- **Eval:** gate качества retrieval (precision@k / hit-rate / simpleScore, пороги fail) на offline trigram-корпусе + merge fixtures; smoke permissions/confirm в `src/test/eval/`; запуск `npm test -- --grep eval` или `npm run test:eval` (без remote embeddings)
+- **Mentions:** `@Docs` / `@past` / `@terminals` - ранжирование по релевантности query/arg + per-kind квоты токенов (docs 3k / past 2.5k / terminals 2.5k) с eviction низкого score до turn-level `fitMentionsToBudget`
+- **Slash:** валидация `$ARGUMENTS` / `$n` + frontmatter `arguments:`; autocomplete ставит `/cmd ` для ввода args
 
 ## 0.4.0 (11 сентября 2026)
 

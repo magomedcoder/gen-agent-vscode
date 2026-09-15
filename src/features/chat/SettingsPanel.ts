@@ -219,6 +219,14 @@ export class SettingsPanel {
 			case 'loadIndexStatus':
 				await this.postIndexStatus();
 				return;
+			case 'cancelIndex':
+				getIndexManagerInstance()?.cancelIndex();
+				await this.postIndexStatus();
+				return;
+			case 'repairIndex':
+				await getIndexManagerInstance()?.repairAndReindex();
+				await this.postIndexStatus();
+				return;
 			case 'loadHooks':
 				await this.postHooksData();
 				return;

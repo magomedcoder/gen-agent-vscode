@@ -10,7 +10,8 @@ import { collectReferenceHits, ensureReferenceCached, formatReferenceSourceBlock
 import { ensureTerminalBufferListener, getTerminalBuffers } from './terminalBuffer';
 import { getSessionPeek } from './sessionStore';
 import type { ChatUiMessage } from './protocol';
-
+import { combineRetrievalScore, MENTION_KIND_MAX_HITS, MENTION_KIND_TOKEN_QUOTAS, packMentionHitsToQuota, packPastMessagesToQuota, scoreQueryRelevance } from './mentionKindRetrieval';
+import type { MentionRetrievalHit } from './mentionKindRetrieval';
 export type MentionKind = 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'git_changes' | 'problems' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref' | 'map' | 'symbols';
 
 export interface ParsedMention {
@@ -220,7 +221,7 @@ async function resolveCodeContext(): Promise<string> {
 	return `[code ${label} ${relative}:${startLine + 1}-${endLine + 1}]\n${clipped}`;
 }
 
-// Поиск по docs/ и markdown (как search_docs)
+// Поиск по docs/ и markdown: rank по query + per-kind token quota
 async function resolveDocsContext(query: string): Promise<string> {
 	const q = query.trim() || 'docs';
 	const folder = vscode.workspace.workspaceFolders?.[0];
@@ -228,69 +229,86 @@ async function resolveDocsContext(query: string): Promise<string> {
 		return '[Docs] нет workspace';
 	}
 
+	const empty = `[Docs] ничего не найдено по запросу «${q}»`;
+	const toPack = (hits: MentionRetrievalHit[]) => {
+		const packed = packMentionHitsToQuota(hits, 'docs', {
+			kindTag: 'Docs',
+			emptyMessage: empty,
+		});
+		return packed.text || empty;
+	};
+
 	try {
 		const hits = await semanticSearchWorkspace(q, {
 			maxFiles: 30,
-			maxResults: 6
+			maxResults: MENTION_KIND_MAX_HITS.docs,
 		});
 		const docs = hits.filter((h) => /(^|\/)(docs?|documentation)\//i.test(h.path) || /\.md$/i.test(h.path));
 		const picked = docs.length ? docs : hits;
 		if (picked.length) {
-			const lines = picked.map((h) => {
-				const snip = (h.snippet ?? '').slice(0, 1200);
-				return `[Docs ${h.path}]\n${snip}`;
+			const ranked: MentionRetrievalHit[] = picked.map((h) => {
+				const snip = (h.snippet ?? '').slice(0, 1600);
+				const inDocs = /(^|\/)(docs?|documentation)\//i.test(h.path) ? 0.08 : 0;
+				return {
+					path: h.path,
+					snippet: snip,
+					score: Math.min(1, combineRetrievalScore(h.score, h.path, snip, q) + inDocs),
+				};
 			});
-			return lines.join('\n\n').slice(0, 12_000);
+			return toPack(ranked);
 		}
 	} catch {}
 
 	const patterns = ['docs/**/*.md', 'Documentation/**/*.md', 'doc/**/*.md', '*.md'];
-	const blocks: string[] = [];
+	const candidates: MentionRetrievalHit[] = [];
+	const seen = new Set<string>();
 	const needle = q.toLowerCase();
 
 	for (const pattern of patterns) {
 		const uris = await vscode.workspace.findFiles(
 			new vscode.RelativePattern(folder, pattern),
 			'**/{.gen,node_modules,.git}/**',
-			20,
+			24,
 		);
 
 		for (const uri of uris) {
 			const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
-			if (needle && needle !== 'docs' && !relative.toLowerCase().includes(needle)) {
-				try {
-					const raw = await vscode.workspace.fs.readFile(uri);
-					const text = new TextDecoder('utf8', { fatal: false }).decode(raw);
-					if (!text.toLowerCase().includes(needle)) {
-						continue;
-					}
-
-					blocks.push(`[Docs ${relative}]\n${text.slice(0, 2000)}`);
-				} catch {
-					continue;
-				}
-			} else {
-				try {
-					const raw = await vscode.workspace.fs.readFile(uri);
-					const text = new TextDecoder('utf8', { fatal: false }).decode(raw);
-					blocks.push(`[Docs ${relative}]\n${text.slice(0, 2000)}`);
-				} catch {
-					continue;
-				}
+			if (seen.has(relative)) {
+				continue;
 			}
-			if (blocks.length >= 6) {
+
+			try {
+				const raw = await vscode.workspace.fs.readFile(uri);
+				const text = new TextDecoder('utf8', { fatal: false }).decode(raw);
+				const snip = text.slice(0, 2000);
+				const pathHit = needle && needle !== 'docs' && relative.toLowerCase().includes(needle);
+				const bodyHit = needle && needle !== 'docs' && text.toLowerCase().includes(needle);
+				if (needle && needle !== 'docs' && !pathHit && !bodyHit) {
+					continue;
+				}
+
+				seen.add(relative);
+				const inDocs = /(^|\/)(docs?|documentation)\//i.test(relative) ? 0.1 : 0;
+				candidates.push({
+					path: relative,
+					snippet: snip,
+					score: Math.min(1, scoreQueryRelevance(`${relative}\n${snip}`, q) + inDocs + (pathHit ? 0.15 : 0)),
+				});
+			} catch {
+				continue;
+			}
+
+			if (candidates.length >= MENTION_KIND_MAX_HITS.docs * 2) {
 				break;
 			}
 		}
 
-		if (blocks.length >= 6) {
+		if (candidates.length >= MENTION_KIND_MAX_HITS.docs * 2) {
 			break;
 		}
 	}
 
-	return blocks.length
-		? blocks.join('\n\n').slice(0, 12_000)
-		: `[Docs] ничего не найдено по запросу «${q}»`;
+	return candidates.length ? toPack(candidates) : empty;
 }
 
 // Тело `.gen/agents/{name}.md` в контекст
@@ -367,8 +385,8 @@ async function resolveAgentContext(name: string | undefined): Promise<string> {
 	return `[agent] файл .gen/agents/${slug || rawName}.md не найден`;
 }
 
-// Хвосты вывода открытых терминалов (ring-буфер из terminalBuffer)
-function resolveTerminalsContext(): string {
+// Хвосты терминалов: rank по query (cleanText) + token quota
+function resolveTerminalsContext(query?: string): string {
 	ensureTerminalBufferListener();
 	const perCap = Math.min(4_000, getSettings().maxInputChars);
 	const terminals = getTerminalBuffers();
@@ -376,17 +394,31 @@ function resolveTerminalsContext(): string {
 		return '[terminals] нет открытых терминалов';
 	}
 
-	const blocks = terminals.map((t) => {
+	const q = query?.trim() ?? '';
+	const hits: MentionRetrievalHit[] = terminals.map((t, i) => {
 		const body = t.text.trim()
 			? (t.text.length > perCap ? `${t.text.slice(-perCap)}\n...` : t.text)
 			: '(нет буферизованного вывода - выполни команду в терминале)';
-		return `[terminal ${t.name}]\n${body}`;
+		const lexical = scoreQueryRelevance(`${t.name}\n${body}`, q);
+		const hasOutput = t.text.trim() ? 0.12 : 0;
+		// Без query - чуть предпочитаем терминалы с выводом; иначе lexical
+		const score = q
+			? Math.min(1, lexical + hasOutput)
+			: Math.min(1, hasOutput + (terminals.length - i) * 0.01);
+		return {
+			path: t.name,
+			header: t.name,
+			snippet: body,
+			score,
+		};
 	});
-	return blocks.join('\n\n').slice(0, Math.min(24_000, getSettings().maxInputChars * 3));
-}
 
-const PAST_MSG_ROLES = new Set(['user', 'assistant']);
-const PAST_LAST_N = 12;
+	const packed = packMentionHitsToQuota(hits, 'terminals', {
+		kindTag: 'terminal',
+		maxTokens: MENTION_KIND_TOKEN_QUOTAS.terminals,
+	});
+	return packed.text || '[terminals] нет открытых терминалов';
+}
 
 function lastUserSnippet(messages: ChatUiMessage[], maxLen = 120): string {
 	for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -400,37 +432,15 @@ function lastUserSnippet(messages: ChatUiMessage[], maxLen = 120): string {
 	return '';
 }
 
-function formatPastMessages(messages: ChatUiMessage[], budget: number): string {
-	const picked = messages.filter((m) => PAST_MSG_ROLES.has(m.role) && m.content.trim()).slice(-PAST_LAST_N);
-	const blocks: string[] = [];
-	let used = 0;
-	for (const m of picked) {
-		const role = m.role === 'user' ? 'user' : 'assistant';
-		const body = m.content.trim();
-		const remaining = budget - used;
-		if (remaining <= 40) {
-			blocks.push('...');
-			break;
-		}
-
-		const clipped = body.length > remaining ? `${body.slice(0, remaining)}\n...` : body;
-		const block = `${role}:\n${clipped}`;
-		blocks.push(block);
-		used += block.length + 2;
-	}
-
-	return blocks.join('\n\n');
-}
-
-// Прошлые чаты из SessionStore (через setSessionPeek)
-function resolvePastChat(arg?: string): string {
+// Прошлые чаты: rank сессий / сообщений по query + token quota
+function resolvePastChat(arg?: string, query?: string): string {
 	const store = getSessionPeek();
 	if (!store) {
 		return '[past] нет доступа к сессиям';
 	}
 
-	const maxChars = getSettings().maxInputChars;
 	const needle = arg?.trim();
+	const rankQuery = (query?.trim() || needle || '').trim();
 	const currentId = store.getCurrentSessionId();
 
 	if (needle) {
@@ -449,27 +459,48 @@ function resolvePastChat(arg?: string): string {
 			return `[past] сессия «${hit.title}» не найдена`;
 		}
 
-		const body = formatPastMessages(session.messages, maxChars);
-		if (!body) {
+		const packed = packPastMessagesToQuota(session.messages, rankQuery, {
+			sessionTitle: session.title,
+			maxTokens: MENTION_KIND_TOKEN_QUOTAS.past,
+		});
+		if (!packed.kept.length) {
 			return `[past ${session.title}]\n(нет сообщений)`;
 		}
 
-		return `[past ${session.title}]\n${body}`.slice(0, maxChars + 200);
+		return packed.text;
 	}
 
-	// Без arg - список недавних сессий (без текущей)
-	const recent = store.listSessions().filter((s) => s.id !== currentId).slice(0, 12);
+	// Без arg - ранжированный список недавних сессий (без текущей)
+	const recent = store.listSessions().filter((s) => s.id !== currentId);
 	if (recent.length === 0) {
 		return '[past] нет других сохранённых чатов';
 	}
 
-	const lines = recent.map((s) => {
+	const hits: MentionRetrievalHit[] = recent.map((s, i) => {
 		const session = store.getSession(s.id);
 		const snip = session ? lastUserSnippet(session.messages) : '';
-		const tail = snip ? ` - ${snip}` : '';
-		return `- ${s.title}${tail}`;
+		const line = snip ? `${s.title} - ${snip}` : s.title;
+		const recency = (recent.length - i) / Math.max(1, recent.length);
+		const lexical = scoreQueryRelevance(`${s.title}\n${snip}`, rankQuery);
+		return {
+			path: s.id,
+			header: s.title,
+			snippet: line,
+			score: Math.min(1, lexical * 0.7 + recency * 0.3),
+		};
 	});
-	return `[past chats]\n${lines.join('\n')}`.slice(0, maxChars);
+
+	const packed = packMentionHitsToQuota(hits, 'past', {
+		kindTag: 'past',
+		emptyMessage: '[past] нет других сохранённых чатов',
+	});
+	if (!packed.kept.length) {
+		return '[past] нет других сохранённых чатов';
+	}
+
+	const lines = packed.kept.map((h) => `- ${h.snippet}`);
+	const note = packed.truncated ? `\n[truncated past list  quota ${packed.maxTokens} tok]` : '';
+	return `[past chats]\n${lines.join('\n')}${note}`;
 }
 
 export function parseMentions(text: string): ParsedMention[] {
@@ -693,14 +724,15 @@ export async function resolveMentions(text: string): Promise<ResolvedMentions> {
 
 		if (mention.kind === 'terminals') {
 			labels.push('@terminals');
-			pushBlock('@terminals', resolveTerminalsContext());
+			// cleanText - query для rank (kind без arg)
+			pushBlock('@terminals', resolveTerminalsContext(cleanText));
 			continue;
 		}
 
 		if (mention.kind === 'past') {
 			const label = mention.arg ? `@past ${mention.arg}` : '@past';
 			labels.push(label);
-			pushBlock(label, resolvePastChat(mention.arg));
+			pushBlock(label, resolvePastChat(mention.arg, cleanText));
 			continue;
 		}
 

@@ -38,12 +38,14 @@ export interface CodebaseSearchHit {
 }
 
 export interface IndexProgress {
-	state: 'idle' | 'indexing' | 'ready' | 'error';
+	state: 'idle' | 'indexing' | 'ready' | 'error' | 'cancelled';
 	fileCount: number;
 	chunkCount: number;
 	// ISO из manifest.updatedAt после успешной индексации
 	updatedAt?: string;
 	lastError?: string;
+	// Ошибки по отдельным файлам при partial failure (fullIndex не валится целиком)
+	partialErrors?: string[];
 }
 
 export function emptyManifest(): IndexManifest {

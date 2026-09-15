@@ -8,6 +8,8 @@ import { SettingsSection } from './SettingsSection';
 interface IndexingPageProps extends SettingsPageProps {
 	indexStatus?: IndexEngineStatus;
 	onLoadIndexStatus?: () => void;
+	onCancelIndex?: () => void;
+	onRepairIndex?: () => void;
 }
 
 function formatIndexUpdatedAt(iso?: string): string | undefined {
@@ -42,7 +44,9 @@ function buildIndexEngineLine(status: IndexEngineStatus): string {
 		parts.push(t('settings.indexEngine.disabled'));
 	} else if (status.progressState === 'indexing') {
 		parts.push(t('settings.indexEngine.indexing'));
-	} else if (status.progressState === 'error') {
+	} else if (status.progressState === 'cancelled') {
+		parts.push(t('settings.indexEngine.cancelled'));
+	} else if (status.progressState === 'error' || status.corrupt) {
 		parts.push(t('settings.indexEngine.error'));
 	}
 
@@ -58,11 +62,32 @@ function buildIndexEngineLine(status: IndexEngineStatus): string {
 	return `${t('settings.indexEngine.label')}: ${parts.toString()}`;
 }
 
+function showRepairButton(status: IndexEngineStatus): boolean {
+	if (!status.indexingEnabled) {
+		return false;
+	}
+	
+	if (status.progressState === 'indexing') {
+		return false;
+	}
+
+	return (
+		status.progressState === 'error' ||
+		status.progressState === 'cancelled' ||
+		Boolean(status.corrupt) ||
+		Boolean(status.missingDirDigests) ||
+		Boolean(status.partialErrors?.length) ||
+		Boolean(status.lastError)
+	);
+}
+
 export function IndexingPage({
 	draft,
 	setField,
 	indexStatus,
 	onLoadIndexStatus,
+	onCancelIndex,
+	onRepairIndex,
 }: IndexingPageProps) {
 	useEffect(() => {
 		onLoadIndexStatus?.();
@@ -77,6 +102,34 @@ export function IndexingPage({
 					{indexStatus.lastError ? (
 						<span className="field__hint field__hint--error">{indexStatus.lastError}</span>
 					) : null}
+					{indexStatus.partialErrors && indexStatus.partialErrors.length > 0 ? (
+						<span className="field__hint field__hint--error">
+							{indexStatus.partialErrors.slice(0, 5).join('\n')}
+							{indexStatus.partialErrors.length > 5
+								? `\n...+${indexStatus.partialErrors.length - 5}`
+								: ''}
+						</span>
+					) : null}
+					<div className="field__actions" style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+						{indexStatus.progressState === 'indexing' ? (
+							<button
+								className="btn btn--secondary"
+								type="button"
+								onClick={() => onCancelIndex?.()}
+							>
+								{t('settings.indexEngine.cancel')}
+							</button>
+						) : null}
+						{showRepairButton(indexStatus) ? (
+							<button
+								className="btn btn--secondary"
+								type="button"
+								onClick={() => onRepairIndex?.()}
+							>
+								{t('settings.indexEngine.repair')}
+							</button>
+						) : null}
+					</div>
 				</div>
 			) : null}
 

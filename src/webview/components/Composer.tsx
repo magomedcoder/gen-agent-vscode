@@ -388,12 +388,14 @@ export function Composer({
 	};
 
 	const applySlashSuggestion = (cmd: SlashCommand) => {
-		setDraft(`/${cmd.name}`);
+		// Если нужны args - пробел после имени, курсор готов к вводу
+		const insert = cmd.needsArgs ? `/${cmd.name} ` : `/${cmd.name}`;
+		setDraft(insert);
 		clearSuggest();
 		requestAnimationFrame(() => {
 			const el = textareaRef.current;
 			el?.focus();
-			const pos = cmd.name.length + 1;
+			const pos = insert.length;
 			el?.setSelectionRange(pos, pos);
 		});
 	};

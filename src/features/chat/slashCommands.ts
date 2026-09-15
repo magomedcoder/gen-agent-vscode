@@ -10,6 +10,12 @@ export interface SlashCommand {
 	detail?: string;
 	// Если задан - переключает режим чата
 	mode?: ChatMode;
+	// Кастомная команда ждёт аргументы ($ARGUMENTS / $1...)
+	needsArgs?: boolean;
+	// Подсказка для picker: «укажи путь...»
+	argsHint?: string;
+	// Сколько позиционных $n минимум
+	minPositionalArgs?: number;
 }
 
 export const SLASH_COMMANDS: readonly SlashCommand[] = [

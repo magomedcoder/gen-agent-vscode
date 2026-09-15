@@ -6,7 +6,8 @@ import { chunkFileContent } from './chunk';
 import { applyDirDigests, canSkipDirRewalk, parentDir } from './dirDigests';
 import { contentHash } from './hash';
 import { listIndexableFiles, readIndexableText } from './scanner';
-import { loadManifest, saveManifest } from './store';
+import { IndexAbortFlag, isIndexAbortError, summarizePartialErrors } from './manifestParse';
+import { loadManifest, repairManifestFile, saveManifest } from './store';
 import { maybeRefreshSymbolIndex, removeSymbolIndexPath, updateSymbolIndexForFile } from './symbolIndex';
 import { maybeRefreshOutlineIndex, removeOutlineIndexPath, updateOutlineIndexForFile } from './tsOutline';
 import { rebuildManifestTrigrams, searchTrigrams } from './trigram';
@@ -18,6 +19,8 @@ export class IndexManager implements vscode.Disposable {
 	private indexing = new Set<string>();
 	private indexed = new Set<string>();
 	private readonly onChangeListeners = new Set<() => void>();
+	// Флаги отмены текущей fullIndex по корню workspace
+	private readonly abortByFolder = new Map<string, IndexAbortFlag>();
 	// Debounce инкрементальных outline/symbol после watcher
 	private outlineRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	private pendingSideIndex = new Map<string, { upsert: Set<string>; remove: Set<string> }>();
@@ -65,12 +68,74 @@ export class IndexManager implements vscode.Disposable {
 		this.outlineRefreshTimers.clear();
 		this.pendingSideIndex.clear();
 
+		for (const flag of this.abortByFolder.values()) {
+			flag.abort();
+		}
+		this.abortByFolder.clear();
+
 		for (const d of this.disposables) {
 			d.dispose();
 		}
 
 		this.disposables.length = 0;
 		this.onChangeListeners.clear();
+	}
+
+	// Отменить идущую fullIndex для папки (или первого корня workspace)
+	cancelIndex(folderFsPath?: string): void {
+		const key = folderFsPath ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!key) {
+			return;
+		}
+
+		const flag = this.abortByFolder.get(key);
+		if (flag) {
+			flag.abort();
+		}
+	}
+
+	/**
+	 * Починить corrupt `.gen/index/manifest.json` и переиндексировать.
+	 * Битый JSON -> empty; missing dirDigests -> recompute; затем force fullIndex.
+	 */
+	async repairAndReindex(folder?: vscode.WorkspaceFolder): Promise<void> {
+		const target = folder ?? vscode.workspace.workspaceFolders?.[0];
+		if (!target) {
+			return;
+		}
+
+		if (getSettings().indexingEnabled === false) {
+			return;
+		}
+
+		const key = target.uri.fsPath;
+		// Если уже идёт индексация - отменить и дождаться освобождения слота
+		if (this.indexing.has(key)) {
+			this.cancelIndex(key);
+			for (let i = 0; i < 50 && this.indexing.has(key); i += 1) {
+				await new Promise((r) => setTimeout(r, 100));
+			}
+		}
+
+		this.setProgress(key, {
+			state: 'indexing',
+			lastError: undefined,
+			partialErrors: undefined,
+		});
+
+		try {
+			await repairManifestFile(key);
+			await this.scheduleFullIndex(target, true);
+		} catch (err) {
+			if (isIndexAbortError(err)) {
+				return;
+			}
+			
+			this.setProgress(key, {
+				state: 'error',
+				lastError: err instanceof Error ? err.message : String(err),
+			});
+		}
 	}
 
 	// Coalesce per-file outline + LSP symbol updates после reindex/delete от watcher
@@ -330,40 +395,78 @@ export class IndexManager implements vscode.Disposable {
 			return;
 		}
 
+		const abort = new IndexAbortFlag();
+		this.abortByFolder.set(key, abort);
 		this.indexing.add(key);
 		this.setProgress(key, {
 			state: 'indexing',
+			lastError: undefined,
+			partialErrors: undefined,
 		});
 
 		try {
-			await this.fullIndex(folder);
+			const result = await this.fullIndex(folder, abort);
 			this.indexed.add(key);
 			const manifest = await loadManifest(key);
+			const fileCount = Object.keys(manifest.files).length;
+			const chunkCount = Object.keys(manifest.chunks).length;
+
+			if (result.cancelled) {
+				this.setProgress(key, {
+					state: 'cancelled',
+					fileCount,
+					chunkCount,
+					updatedAt: manifest.updatedAt,
+					lastError: 'Indexing cancelled',
+					partialErrors: result.partialErrors.length > 0 ? result.partialErrors : undefined,
+				});
+				return;
+			}
+
+			const summary = summarizePartialErrors(result.partialErrors);
 			this.setProgress(key, {
 				state: 'ready',
-				fileCount: Object.keys(manifest.files).length,
-				chunkCount: Object.keys(manifest.chunks).length,
+				fileCount,
+				chunkCount,
 				updatedAt: manifest.updatedAt,
-				lastError: undefined,
+				lastError: summary || undefined,
+				partialErrors: result.partialErrors.length > 0 ? result.partialErrors : undefined,
 			});
 			void maybeRefreshSymbolIndex(folder);
 			void maybeRefreshOutlineIndex(folder);
 		} catch (err) {
+			if (isIndexAbortError(err) || abort.aborted) {
+				const manifest = await loadManifest(key).catch(() => undefined);
+				this.setProgress(key, {
+					state: 'cancelled',
+					fileCount: manifest ? Object.keys(manifest.files).length : 0,
+					chunkCount: manifest ? Object.keys(manifest.chunks).length : 0,
+					updatedAt: manifest?.updatedAt,
+					lastError: 'Indexing cancelled',
+				});
+				return;
+			}
+
 			this.setProgress(key, {
 				state: 'error',
 				lastError: err instanceof Error ? err.message : String(err),
 			});
 		} finally {
 			this.indexing.delete(key);
+			this.abortByFolder.delete(key);
 			this.notifyChanged();
 		}
 	}
 
-	private async fullIndex(folder: vscode.WorkspaceFolder): Promise<void> {
+	private async fullIndex(
+		folder: vscode.WorkspaceFolder,
+		abort?: IndexAbortFlag,
+	): Promise<{ cancelled: boolean; partialErrors: string[] }> {
 		const folderFsPath = folder.uri.fsPath;
 		const manifest = await loadManifest(folderFsPath);
 		const files = await listIndexableFiles(folder);
 		const seen = new Set<string>();
+		const partialErrors: string[] = [];
 
 		// Stat size+mtime (cheap) для content-hash Merkle skip
 		type FileMeta = {
@@ -374,6 +477,7 @@ export class IndexManager implements vscode.Disposable {
 		};
 		const withMeta: FileMeta[] = [];
 		for (const file of files) {
+			abort?.throwIfAborted();
 			seen.add(file.relative);
 			let size = -1;
 			let mtimeMs: number | undefined;
@@ -398,6 +502,7 @@ export class IndexManager implements vscode.Disposable {
 
 		const skipFiles = new Set<string>();
 		for (const [dir, group] of byParent) {
+			abort?.throwIfAborted();
 			const candidates = group.map((f) => {
 				const prev = manifest.files[f.relative];
 				// size+mtime match -> доверяем stored content-hash без чтения байт
@@ -430,26 +535,52 @@ export class IndexManager implements vscode.Disposable {
 			}
 		}
 
+		let cancelled = false;
 		for (const file of withMeta) {
+			if (abort?.aborted) {
+				cancelled = true;
+				break;
+			}
+
 			if (skipFiles.has(file.relative)) {
 				continue;
 			}
 
-			await this.indexOneFile(manifest, folderFsPath, file.relative, file.uri, {
-				save: false,
-				mtimeMs: file.mtimeMs,
-			});
+			try {
+				await this.indexOneFile(manifest, folderFsPath, file.relative, file.uri, {
+					save: false,
+					mtimeMs: file.mtimeMs,
+				});
+			} catch (err) {
+				if (isIndexAbortError(err)) {
+					cancelled = true;
+					break;
+				}
+				// Partial failure: не валим весь индекс - копим ошибку и идём дальше
+				const msg = err instanceof Error ? err.message : String(err);
+				partialErrors.push(`${file.relative}: ${msg}`);
+			}
 		}
 
-		for (const relative of Object.keys(manifest.files)) {
-			if (!seen.has(relative)) {
-				this.dropFile(manifest, relative);
+		if (!cancelled) {
+			for (const relative of Object.keys(manifest.files)) {
+				if (!seen.has(relative)) {
+					this.dropFile(manifest, relative);
+				}
 			}
 		}
 
 		rebuildManifestTrigrams(manifest);
 		applyDirDigests(manifest);
 		await saveManifest(folderFsPath, manifest);
+
+		this.setProgress(folderFsPath, {
+			fileCount: Object.keys(manifest.files).length,
+			chunkCount: Object.keys(manifest.chunks).length,
+			partialErrors: partialErrors.length > 0 ? partialErrors : undefined,
+		});
+
+		return { cancelled, partialErrors };
 	}
 
 	private async reindexFile(folder: vscode.WorkspaceFolder, relative: string, uri: vscode.Uri): Promise<void> {

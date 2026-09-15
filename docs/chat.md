@@ -21,12 +21,13 @@ Type `/` in the input for slash-command autocomplete. You can attach a question:
 
 Confirmations are controlled in **Settings -> Security** (`approvalPolicy` + `autoApprove`):
 
-| Mode             | Behavior                                         |
-| ---------------- | ------------------------------------------------ |
-| `allow`          | Run without asking                               |
-| `ask` / `review` | Confirmation card (Apply / Always / Skip / Stop) |
-| `deny`           | Blocked; reason returned to the model            |
-| `autoApprove`    | Treats `ask` as allow; **deny stays deny**       |
+| Mode          | Behavior                                                                                                         |
+| ------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `allow`       | Run without asking                                                                                               |
+| `ask`         | Confirmation card (Apply / Always / Skip / Stop)                                                                 |
+| `review`      | Edits: ConfirmCard with unified diff (Accept / Reject / Always) before write; other actions: heuristic ask/allow |
+| `deny`        | Blocked; reason returned to the model                                                                            |
+| `autoApprove` | Treats `ask` as allow; **deny stays deny**                                                                       |
 
 Per-action keys: `shell`, `edits`, `delete`, `mcp`, `web`, `outside`, `task`, `skill`. Capability toggles (terminal / file / web / ...) are coarse switches on top.
 
@@ -70,7 +71,9 @@ In the input, type `@` and choose:
 | `@file path`                    | File contents                                                                 |
 | `@folder path`                  | Files from a folder (capped)                                                  |
 | `@code`                         | Editor selection or symbol near the cursor                                    |
-| `@Docs` / `@Docs query`         | Search `docs/` and markdown                                                   |
+| `@Docs` / `@Docs query`         | Ranked `docs/` / markdown hits (token quota)                                  |
+| `@terminals`                    | Ranked terminal buffer tails (token quota; uses message text as query)        |
+| `@past` / `@past title`         | Ranked past chats / messages (token quota)                                    |
 | `@agent name`                   | Body of `.gen/agents/{name}.md`                                               |
 | `@codebase` / `@codebase query` | Fragments from the local index + open editors                                 |
 | `@map`                          | Project map outline (`.gen/map`)                                              |

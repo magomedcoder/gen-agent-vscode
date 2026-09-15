@@ -13,6 +13,11 @@
 - **Tools:** `pack_context` / `similar_code` - token budget (`max_tokens` / `maxTokens`) with lowest-score eviction; structured provenance on each hit (path, line range, tool, reason, score, estimatedTokens); `pack_context` JSON now includes `hits` (+ keeps `text`)
 - **Tools:** `find_references` multi-root (`folder`/`root`), optional path (workspace symbols), `limit`/`offset`/`page` paging with `total`/`hasMore`/`nextOffset`
 - **Mentions:** paths with spaces via quotes / backticks (`@file "my dir/a.ts"`, `@file:"..."`, `` @file:`...` ``); autocomplete and paste quote spaced paths; unquoted mentions unchanged
+- **Permissions:** policy `review` on edits shows unified diff in ConfirmCard before Apply (Accept / Reject / Always); no longer heuristic allow for non-risky paths; `autoApprove` does not skip review
+- **Index UI:** cancel in-progress fullIndex (`cancelled` state); per-file partial failure keeps saved chunks + `partialErrors`; Repair/Rebuild for corrupt manifest / missing `dirDigests` (Settings -> Agent -> Indexing)
+- **Eval:** retrieval quality gate (precision@k / hit-rate / simpleScore, fail thresholds) on offline trigram corpus + merge fixtures; permissions/confirm smoke in `src/test/eval/`; run `npm test -- --grep eval` or `npm run test:eval` (no remote embeddings)
+- **Mentions:** `@Docs` / `@past` / `@terminals` - rank by query/arg relevance + per-kind token quotas (docs 3k / past 2.5k / terminals 2.5k) with lowest-score eviction before turn-level `fitMentionsToBudget`
+- **Slash:** `$ARGUMENTS` / `$n` validation + frontmatter `arguments:` hint; autocomplete leaves `/cmd ` ready for args
 
 ## 0.4.0 (11 September 2026)
 

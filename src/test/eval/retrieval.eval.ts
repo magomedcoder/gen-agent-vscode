@@ -1,8 +1,93 @@
 import * as assert from 'assert';
+import { chunkFileContent } from '../../features/index/chunk.js';
+import { aggregateRetrievalMetrics, assertRetrievalGate, DEFAULT_RETRIEVAL_GATE, hitAtK, precisionAtK, reciprocalRank } from '../../features/index/retrievalMetrics.js';
+import type { IndexManifest } from '../../features/index/types.js';
+import { buildTrigramIndex, searchTrigrams } from '../../features/index/trigram.js';
 import { FIND_CODE_MAX_CHARS, mergeFindCodeHits, truncateFindCodeJson } from '../../features/agent/tools/search/findCodeMerge.js';
 import type { FindCodeRawHit } from '../../features/agent/tools/search/findCodeMerge.js';
 import { buildTreeFromPaths, formatOutline, heuristicFileSummary, isProjectMapStale } from '../../features/index/projectMap.js';
 import type { ProjectMapDocument } from '../../features/index/projectMap.js';
+
+// Мини-корпус для offline trigram (без remote embeddings)
+function buildOfflineTrigramCorpus(): IndexManifest {
+	const files: Array<{ path: string; content: string }> = [
+		{
+			path: 'src/auth/login.ts',
+			content: [
+				'export function authenticateUser(token: string) {',
+				'  return verifyToken(token);',
+				'}',
+				'',
+			].join('\n'),
+		},
+		{
+			path: 'src/auth/session.ts',
+			content: [
+				'export class SessionManager {',
+				'  createSession(userId: string) {',
+				'    return { userId };',
+				'  }',
+				'}',
+				'',
+			].join('\n'),
+		},
+		{
+			path: 'src/db/query.ts',
+			content: [
+				'export function runSqlQuery(sql: string) {',
+				'  return executeSql(sql);',
+				'}',
+				'',
+			].join('\n'),
+		},
+		{
+			path: 'src/ui/button.ts',
+			content: [
+				'export function renderButton(label: string) {',
+				'  return `<button>${label}</button>`;',
+				'}',
+				'',
+			].join('\n'),
+		},
+		{
+			path: 'docs/permissions.md',
+			content: 'Approval policy confirm always allow denylist shell edits\n',
+		},
+	];
+
+	const chunks = files.flatMap((f) => chunkFileContent(f.path, f.content));
+	const byId = Object.fromEntries(chunks.map((c) => [c.id, c]));
+	return {
+		version: 1,
+		updatedAt: '2026-09-15T00:00:00.000Z',
+		files: {},
+		chunks: byId,
+		trigrams: buildTrigramIndex(chunks),
+		dirDigests: {},
+	};
+}
+
+// Ранжированные пути по offline trigram (chunk -> path, max score)
+function rankedPathsFromTrigram(manifest: IndexManifest, query: string, cap: number): string[] {
+	const hits = searchTrigrams(manifest, query, cap * 4);
+	const best = new Map<string, number>();
+	for (const hit of hits) {
+		const chunk = manifest.chunks[hit.chunkId];
+		if (!chunk) {
+			continue;
+		}
+
+		const prev = best.get(chunk.path) ?? 0;
+		if (hit.score > prev) {
+			best.set(chunk.path, hit.score);
+		}
+	}
+	
+	return [...best.entries()]
+		.sort((a, b) => b[1] - a[1])
+		.slice(0, cap)
+		.map(([path]) => path);
+}
 
 suite('eval/retrieval', () => {
 	test('fixture: symbol-like hits merge path+line и boost multi-source', () => {
@@ -42,23 +127,23 @@ suite('eval/retrieval', () => {
 
 	test('fixture: path intent предпочитает file_search score', () => {
 		const raw: FindCodeRawHit[] = [
-			{ 
-				path: 'src/a/foo.ts', 
-				score: 0.4, 
-				source: 'grep', 
-				why: 'text' 
+			{
+				path: 'src/a/foo.ts',
+				score: 0.4,
+				source: 'grep',
+				why: 'text',
 			},
-			{ 
-				path: 'src/a/fooBar.ts', 
-				score: 0.95, 
-				source: 'file_search', 
-				why: 'path' 
+			{
+				path: 'src/a/fooBar.ts',
+				score: 0.95,
+				source: 'file_search',
+				why: 'path',
 			},
-			{ 
-				path: 'src/b/other.ts', 
-				score: 0.7, 
-				source: 'glob', 
-				why: 'glob' 
+			{
+				path: 'src/b/other.ts',
+				score: 0.7,
+				source: 'glob',
+				why: 'glob',
 			},
 		];
 		const merged = mergeFindCodeHits(raw, 3);
@@ -74,14 +159,14 @@ suite('eval/retrieval', () => {
 			sources: ['grep'],
 			why: 'fixture',
 		}));
-		const json = truncateFindCodeJson({ 
-			query: 'localize bug', 
-			hits 
+		const json = truncateFindCodeJson({
+			query: 'localize bug',
+			hits,
 		}, FIND_CODE_MAX_CHARS);
 		assert.ok(json.length <= FIND_CODE_MAX_CHARS);
-		const parsed = JSON.parse(json) as { 
-			query?: string; 
-			truncated?: boolean 
+		const parsed = JSON.parse(json) as {
+			query?: string;
+			truncated?: boolean;
 		};
 		assert.strictEqual(parsed.query, 'localize bug');
 	});
@@ -112,5 +197,106 @@ suite('eval/retrieval', () => {
 		};
 		assert.strictEqual(isProjectMapStale(cached, '2026-09-01T00:00:00.000Z'), true);
 		assert.strictEqual(isProjectMapStale(cached, '2026-01-01T00:00:00.000Z'), false);
+	});
+
+	test('metrics: precision@k / hit@k / RR на известных ranked списках', () => {
+		const ranked = [
+			'src/auth/login.ts',
+			'src/ui/button.ts',
+			'src/db/query.ts',
+		];
+		const relevant = ['src/auth/login.ts'];
+		assert.strictEqual(precisionAtK(ranked, relevant, 3), 1 / 3);
+		assert.strictEqual(hitAtK(ranked, relevant, 3), true);
+		assert.strictEqual(reciprocalRank(ranked, relevant), 1);
+		assert.strictEqual(hitAtK(['src/ui/button.ts'], relevant, 1), false);
+		assert.strictEqual(reciprocalRank(['src/ui/button.ts', 'src/auth/login.ts'], relevant), 0.5);
+	});
+
+	test('quality gate: offline trigram corpus проходит CI пороги (без embeddings)', () => {
+		const manifest = buildOfflineTrigramCorpus();
+		const k = DEFAULT_RETRIEVAL_GATE.k;
+		const cases = [
+			{
+				query: 'authenticateUser token',
+				rankedPaths: rankedPathsFromTrigram(manifest, 'authenticateUser token', k),
+				relevant: ['src/auth/login.ts'],
+			},
+			{
+				query: 'SessionManager createSession',
+				rankedPaths: rankedPathsFromTrigram(manifest, 'SessionManager createSession', k),
+				relevant: ['src/auth/session.ts'],
+			},
+			{
+				query: 'runSqlQuery executeSql',
+				rankedPaths: rankedPathsFromTrigram(manifest, 'runSqlQuery executeSql', k),
+				relevant: ['src/db/query.ts'],
+			},
+			{
+				query: 'approval policy confirm denylist',
+				rankedPaths: rankedPathsFromTrigram(manifest, 'approval policy confirm denylist', k),
+				relevant: ['docs/permissions.md'],
+			},
+		];
+
+		for (const c of cases) {
+			assert.ok(
+				c.rankedPaths.length > 0,
+				`trigram не вернул hits для «${c.query}» - проверь корпус/tokenize`,
+			);
+		}
+
+		const metrics = aggregateRetrievalMetrics(cases, k);
+		assertRetrievalGate(metrics, DEFAULT_RETRIEVAL_GATE);
+		assert.ok(metrics.hitRate >= DEFAULT_RETRIEVAL_GATE.minHitRate);
+		assert.ok(metrics.meanPrecisionAtK >= DEFAULT_RETRIEVAL_GATE.minMeanPrecisionAtK);
+		assert.ok(metrics.simpleScore >= DEFAULT_RETRIEVAL_GATE.minSimpleScore);
+	});
+
+	test('quality gate: mergeFindCodeHits держит gold path в top-k (score gate)', () => {
+		const raw: FindCodeRawHit[] = [
+			{
+				path: 'src/noise/a.ts',
+				score: 0.4,
+				source: 'grep',
+				why: 'noise',
+			},
+			{
+				path: 'src/auth/login.ts',
+				score: 0.9,
+				source: 'codebase_search',
+				why: 'gold',
+			},
+			{
+				path: 'src/noise/b.ts',
+				score: 0.5,
+				source: 'glob',
+				why: 'noise',
+			},
+			{
+				path: 'src/auth/login.ts',
+				score: 0.7,
+				source: 'grep',
+				why: 'gold-grep',
+			},
+		];
+		const merged = mergeFindCodeHits(raw, 5);
+		const ranked = merged.map((h) => h.path);
+		const metrics = aggregateRetrievalMetrics(
+			[
+				{
+					query: 'authenticateUser',
+					rankedPaths: ranked,
+					relevant: ['src/auth/login.ts'],
+				},
+			],
+			DEFAULT_RETRIEVAL_GATE.k,
+		);
+		assertRetrievalGate(metrics, {
+			...DEFAULT_RETRIEVAL_GATE,
+			minMeanPrecisionAtK: 0.3,
+			minSimpleScore: 0.7,
+		});
+		assert.strictEqual(ranked[0], 'src/auth/login.ts');
 	});
 });

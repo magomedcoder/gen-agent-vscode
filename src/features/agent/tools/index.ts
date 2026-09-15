@@ -3,7 +3,7 @@ import type { LlmToolDefinition } from '../../../core/llm/types';
 import { getSettings } from '../../../core/config/settings';
 import { logAgentTool } from '../audit';
 import { isMutatingTool } from '../auth';
-import { evaluateApproval, matchesSensitivePath, suggestPattern, toolActionType } from '../permissionPolicy';
+import { evaluateApproval, matchesSensitivePath, suggestPattern, toolActionType, type PermissionDecision } from '../permissionPolicy';
 import { mutationPathsFromArgs } from '../plan';
 import { isOutsideWorkspaceInput, pathIsInside } from '../policy';
 import { getAgentRoot } from '../agentRoot';
@@ -14,6 +14,8 @@ import { executeSubjectFromArgs, mcpCallSubjectFromArgs } from './mcp/execute';
 import { getToolByName, listTools } from './registry';
 import { confirmAlwaysOrSkip } from './confirm';
 import { formatToolConfirmDetail } from './toolConfirmFormat';
+import { buildEditReviewEntriesFromArgs, editPathsFromToolArgs, formatEditReviewPreview, needsReviewDiffConfirm } from './reviewEditPreview';
+import { pathExists, resolveWorkspacePath } from '../workspacePath';
 import type { TodoStore } from '../todoStore';
 import type { ShellSession } from '../shellSession';
 import type { TaskToolContext } from './shell/taskShell';
@@ -265,14 +267,15 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 	// permission.task / субагенты: чуть строже (не наследовать sessionAllow, не auto-skip confirm)
 	const nestedStrict = (ext.subagentDepth ?? 0) > 0;
 
-	// Здесь центральный deny / session-allow; ask -> карточка ниже (до execute)
+	// Здесь центральный deny / session-allow; ask|review -> карточка ниже (до execute)
+	let decision: PermissionDecision | undefined;
 	if (action) {
-		let decision = evaluateApproval(action, subject, settings.approvalPolicy, nestedStrict ? undefined : ext.sessionAllow);
+		decision = evaluateApproval(action, subject, settings.approvalPolicy, nestedStrict ? undefined : ext.sessionAllow);
 		if (sensitiveWrite && decision === 'allow') {
 			decision = 'ask';
 		}
 
-		if (planShellForceAsk && decision === 'allow') {
+		if (planShellForceAsk && (decision === 'allow' || decision === 'review')) {
 			decision = 'ask';
 		}
 
@@ -291,27 +294,70 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 			};
 		}
 
-		const canSkip = decision === 'allow' || settings.autoApprove;
+		// review edits: не skip даже при autoApprove (нужен явный Accept + diff)
+		const canSkip =
+			decision === 'allow'
+			|| (settings.autoApprove && decision === 'ask');
 		if (canSkip && !sensitiveWrite && !planShellForceAsk && !(nestedStrict && isMutatingTool(name))) {
 			// Не дублировать confirm для allowlist / auto-approve (не .env*, не Plan shell, не мутации субагента)
 			ext.skipConfirm = true;
 		}
 	}
 
-	if (planShellForceAsk) {
-		// Plan shell: всегда confirm (в т.ч. при autoApprove / allow)
+	const reviewEdit = needsReviewDiffConfirm(decision ?? 'allow', action);
+
+	if (planShellForceAsk || reviewEdit) {
+		// Plan shell / review edits: всегда confirm (в т.ч. при autoApprove)
 		ext.forceConfirm = true;
 		ext.skipConfirm = false;
 	} else {
 		ext.forceConfirm = false;
 	}
 
-	// Центральный ask: одна карточка в чате до execute
+	// Центральный ask/review: одна карточка в чате до execute (без второй в tool)
 	if (action && (!ext.skipConfirm || ext.forceConfirm)) {
+		let detail = formatToolConfirmDetail(subject, rawArguments, name);
+		let title = vscode.l10n.t('agent.confirm.toolAsk', name);
+		let confirmOpts: {
+			applyLabel?: string;
+			skipLabel?: string;
+			hint?: string;
+		} | undefined;
+
+		if (reviewEdit) {
+			title = vscode.l10n.t('agent.confirm.reviewEdit', name);
+			confirmOpts = {
+				applyLabel: vscode.l10n.t('chat.hunk.accept'),
+				skipLabel: vscode.l10n.t('chat.hunk.reject'),
+				hint: vscode.l10n.t('agent.confirm.reviewHint'),
+			};
+			try {
+				const args = parseToolArguments(rawArguments);
+				const paths = editPathsFromToolArgs(name, args);
+				const files = new Map<string, string>();
+				for (const p of paths) {
+					try {
+						const resolved = await resolveWorkspacePath(p);
+						if (await pathExists(resolved.uri)) {
+							const doc = await vscode.workspace.openTextDocument(resolved.uri);
+							const text = doc.getText();
+							files.set(p, text);
+							files.set(resolved.relative, text);
+						}
+					} catch {}
+				}
+				const entries = buildEditReviewEntriesFromArgs(name, args, files);
+				if (entries?.length) {
+					detail = formatEditReviewPreview(entries);
+				}
+			} catch {}
+		}
+
 		const denied = await confirmAlwaysOrSkip(
 			ext,
-			vscode.l10n.t('agent.confirm.toolAsk', name),
-			formatToolConfirmDetail(subject, rawArguments, name),
+			title,
+			detail,
+			confirmOpts,
 		);
 		if (denied) {
 			logAgentTool({
@@ -322,7 +368,7 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 			});
 			return denied;
 		}
-		// Инструмент не должен показывать вторую карточку
+		// Инструмент не должен показывать вторую карточку на том же edit
 		ext.skipConfirm = true;
 		ext.forceConfirm = false;
 	}

@@ -63,6 +63,8 @@ interface SettingsScreenProps {
 	onMcpOAuthLogout?: (serverName: string) => void;
 	onMcpOAuthDebug?: (serverName: string) => void;
 	onLoadIndexStatus?: () => void;
+	onCancelIndex?: () => void;
+	onRepairIndex?: () => void;
 	onLoadHooks?: () => void;
 	onSaveHooks?: (payload: {
 		beforeSubmit: string[];
@@ -134,6 +136,8 @@ export function SettingsScreen({
 	onMcpOAuthLogout,
 	onMcpOAuthDebug,
 	onLoadIndexStatus,
+	onCancelIndex,
+	onRepairIndex,
 	onLoadHooks,
 	onSaveHooks,
 	onOpenHooksFile,
@@ -325,6 +329,8 @@ export function SettingsScreen({
 									setField={setField}
 									indexStatus={indexStatus}
 									onLoadIndexStatus={onLoadIndexStatus}
+									onCancelIndex={onCancelIndex}
+									onRepairIndex={onRepairIndex}
 								/>
 							</>
 						) : null}

@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { activeSlashQuery, filterSlashCommands, parseSlashMode } from '../features/chat/slashCommands.js';
-import { expandCommandTemplate } from '../features/project/customCommands.js';
+import { expandCommandTemplate, analyzeCommandPlaceholders, validateCommandArgs, customToSlashCommand } from '../features/project/customCommands.js';
 import { parseBangCommands, splitCommandLine } from '../features/chat/bangCommand.js';
 import { splitIntoTurns } from '../features/chat/compact.js';
 
@@ -90,6 +90,26 @@ suite('slashCommands', () => {
 			expandCommandTemplate('Review $ARGUMENTS\nFile: $1', 'src/a.ts --strict'),
 			'Review src/a.ts --strict\nFile: src/a.ts',
 		);
+	});
+
+	test('validateCommandArgs / analyze placeholders', () => {
+		const meta = analyzeCommandPlaceholders('Do $ARGUMENTS with $1 and $2');
+		assert.strictEqual(meta.usesArguments, true);
+		assert.strictEqual(meta.maxPositional, 2);
+		assert.strictEqual(meta.required, true);
+		assert.strictEqual(validateCommandArgs('Do $ARGUMENTS', '').ok, false);
+		assert.strictEqual(validateCommandArgs('Do $ARGUMENTS', 'x').ok, true);
+		assert.strictEqual(validateCommandArgs('A $1 $2', 'only-one').ok, false);
+		assert.strictEqual(validateCommandArgs('A $1 $2', 'one two').ok, true);
+		assert.strictEqual(validateCommandArgs('no placeholders', '').ok, true);
+		const slash = customToSlashCommand({
+			name: 'review',
+			body: 'Review $ARGUMENTS',
+			path: '.gen/commands/review.md',
+			argumentsHint: 'path flags',
+		});
+		assert.strictEqual(slash.needsArgs, true);
+		assert.ok(slash.detail?.includes('path flags'));
 	});
 
 	test('parseBangCommands', () => {

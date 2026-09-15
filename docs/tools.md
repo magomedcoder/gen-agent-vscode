@@ -6,7 +6,7 @@
 
 `.gitignore` and `.genignore` at the workspace root are respected (together with `deniedPaths` from settings). The agent does **not** bypass ignore “to see everything”. Details: [security.md](security.md).
 
-Confirmation follows **Settings -> Security**: `approvalPolicy` (`allow` / `ask` / `review` / `deny`) and `autoApprove` (asks -> allow; denies stay). Capability toggles can disable terminal / file / web entirely.
+Confirmation follows **Settings -> Security**: `approvalPolicy` (`allow` / `ask` / `review` / `deny`) and `autoApprove` (asks -> allow; denies stay; **review** on edits still requires Accept + diff). Capability toggles can disable terminal / file / web entirely.
 
 ## Layout (`src/features/agent/tools/`)
 
@@ -84,7 +84,7 @@ Confirmations are a **card in Gen chat** (Apply / Skip / Stop or Apply / Reject)
 - Chat modes **Debug** / **Design** are enabled via slash commands `/debug` / `/design` (same agent loop with a focused system prompt). Debug prefers `find_logs` + `read_log_tail` + diagnostics; Design uses `open_browser` + `fetch_page` / `design_inspect` (no JS execution / no live DOM clicks). Full browser click-to-code is not wired - see `features/design/designVisual.ts`.
 - Mid-turn: when `shareMode=auto`, each tool-loop iteration refreshes a short live-editor appendix (file + selection snippet) in the system prompt.
 - Scratch: write scripts under `.gen/scratch/` (scaffold dir) and run via `run_scratch` only - **no** arbitrary JS eval from `.gen/tools` / ephemeral tools.
-- Quality: `repo_health` (import cycles + orphans), `test_impact` (related tests). Retrieval eval fixtures: `src/test/eval/retrieval.eval.ts` (no live LLM).
+- Quality: `repo_health` (import cycles + orphans), `test_impact` (related tests). Eval suite: `src/test/eval/` - retrieval quality gate (precision@k / hit-rate / simpleScore, offline trigram) + permissions/confirm smoke; run `npm test -- --grep eval` or `npm run test:eval` (no live LLM / no remote embeddings).
 - Multiple files: start with `propose_plan` -> `.gen/plan.md`; progress via `update_plan`. The plan survives **Clear** chat.
 - Large file: short `write_file` scaffold, then `apply_patch` in chunks.
 - After successful `write_file` / `apply_patch`, if the file has diagnostics, the tool result appends a short nudge (tool still succeeds). Opt-in `formatAfterEdit` in settings runs `editor.action.formatDocument` after those edits.

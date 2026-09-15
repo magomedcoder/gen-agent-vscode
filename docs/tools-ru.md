@@ -6,7 +6,7 @@
 
 Учитываются `.gitignore` и `.genignore` в корне workspace (вместе с `deniedPaths` из настроек). Агент **не** обходит ignore «чтобы всё видеть». Подробнее: [security-ru.md](security-ru.md).
 
-Подтверждение - **Settings -> Безопасность**: `approvalPolicy` (`allow` / `ask` / `review` / `deny`) и `autoApprove` (ask -> allow; deny остаётся). Capability-флаги могут полностью отключить terminal / file / web.
+Подтверждение - **Settings -> Безопасность**: `approvalPolicy` (`allow` / `ask` / `review` / `deny`) и `autoApprove` (ask -> allow; deny остаётся; **review** на edits всё равно требует Accept + diff). Capability-флаги могут полностью отключить terminal / file / web.
 
 ## Раскладка (`src/features/agent/tools/`)
 
@@ -84,7 +84,7 @@ Builtin tools регистрируются через **registry** и лежат
 - Режимы чата **Debug** / **Design** включаются slash-командами `/debug` / `/design` (тот же agent loop со спец. system prompt). Debug: `find_logs` + `read_log_tail` + диагностики; Design: `open_browser` + `fetch_page` / `design_inspect` (без выполнения JS / live DOM-кликов). Полный click-to-code в браузере не подключён - см. `features/design/designVisual.ts`.
 - Mid-turn: при `shareMode=auto` на каждой итерации tool-loop обновляется короткий live-editor appendix (файл + сниппет выделения) в system prompt.
 - Scratch: скрипты в `.gen/scratch/` (scaffold) и запуск только через `run_scratch` - **без** произвольного JS eval из `.gen/tools` / ephemeral.
-- Качество: `repo_health` (циклы + orphans), `test_impact` (связанные тесты). Eval retrieval: `src/test/eval/retrieval.eval.ts` (без live LLM).
+- Качество: `repo_health` (циклы + orphans), `test_impact` (связанные тесты). Eval suite: `src/test/eval/` - gate качества retrieval (precision@k / hit-rate / simpleScore, offline trigram) + smoke permissions/confirm; запуск `npm test -- --grep eval` или `npm run test:eval` (без live LLM / без remote embeddings).
 - Несколько файлов: сначала `propose_plan` -> файл `.gen/plan.md`; прогресс - `update_plan`. План переживает «Очистить» чат.
 - Большой файл: короткая заготовка `write_file`, дальше `apply_patch` кусками.
 - После успешного `write_file` / `apply_patch`, если у файла есть диагностики, в ответ tool добавляется короткая подсказка (tool не падает). Opt-in `formatAfterEdit` в настройках запускает `editor.action.formatDocument` после этих правок.

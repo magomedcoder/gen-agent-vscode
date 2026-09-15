@@ -165,7 +165,7 @@ export function suggestPattern(action: ApprovalActionType, toolName: string, sub
 	return `${toolName}:${s}`;
 }
 
-export type PermissionDecision = 'allow' | 'ask' | 'deny';
+export type PermissionDecision = 'allow' | 'ask' | 'deny' | 'review';
 
 export function evaluateApproval(
 	action: ApprovalActionType,
@@ -197,6 +197,12 @@ export function evaluateApproval(
 	}
 
 	if (ruleCfg.mode === 'review') {
+		// Edits: явный diff preview до Apply (не heuristic allow).
+		// Остальные action: прежняя heuristic (risky -> ask, иначе allow).
+		if (action === 'edits') {
+			return 'review';
+		}
+
 		return isRiskySubject(action, subject) ? 'ask' : 'allow';
 	}
 
