@@ -6,8 +6,11 @@ import { isProjectEnabled } from '../../../project/config';
 import { AGENT_LIMITS } from '../../policy';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../../types';
 import { resolveWorkspacePath, throwIfAborted } from '../../workspacePath';
+import { fitHitsToTokenBudget, resolveMaxTokensArg, toProvenanceHit } from './fitHitsTokenBudget';
 
 const DEFAULT_MAX = 10;
+const DEFAULT_MAX_TOKENS = 2_000;
+const MAX_TOKENS_CAP = 12_000;
 
 function extractRangeText(text: string, startLine?: number, endLine?: number): string {
 	if (startLine === undefined && endLine === undefined) {
@@ -23,7 +26,7 @@ function extractRangeText(text: string, startLine?: number, endLine?: number): s
 // Похожие фрагменты через overlap триграмм индекса / query.
 export const similarCodeTool: ToolDefinition = {
 	name: 'similar_code',
-	description: 'Найти похожие фрагменты кода по пути (+ опц. диапазон строк / query) через trigram/index overlap.',
+	description: 'Найти похожие фрагменты кода по пути (+ опц. диапазон строк / query) через trigram/index overlap; hits с provenance и token budget.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -47,6 +50,10 @@ export const similarCodeTool: ToolDefinition = {
 				type: 'integer',
 				description: `Лимит hits (по умолчанию ${DEFAULT_MAX})`,
 			},
+			max_tokens: {
+				type: 'integer',
+				description: `Лимит токенов (оценка) для hits (по умолчанию ${DEFAULT_MAX_TOKENS}, max ${MAX_TOKENS_CAP}). Синоним: maxTokens.`,
+			},
 		},
 		required: ['path'],
 		additionalProperties: false,
@@ -67,6 +74,7 @@ export const similarCodeTool: ToolDefinition = {
 			AGENT_LIMITS.maxSearchMatches,
 			Math.max(1, asOptionalInt(args, 'max_results') ?? DEFAULT_MAX),
 		);
+		const maxTokens = resolveMaxTokensArg(args, DEFAULT_MAX_TOKENS, MAX_TOKENS_CAP, asOptionalInt);
 
 		let seed = asString(args, 'query', '').trim();
 		try {
@@ -131,16 +139,21 @@ export const similarCodeTool: ToolDefinition = {
 					}
 				}
 
-				return {
+				return toProvenanceHit({
 					path: h.path,
 					startLine: h.startLine,
 					endLine: h.endLine,
 					score: Math.min(1, overlap),
 					snippet: h.snippet.slice(0, 240),
-				};
+					tool: 'similar_code',
+					reason: 'trigram overlap',
+					source: 'codebase',
+				});
 			})
 			.sort((a, b) => b.score - a.score)
 			.slice(0, maxResults);
+
+		const fitted = fitHitsToTokenBudget(enriched, maxTokens);
 
 		return {
 			ok: true,
@@ -148,7 +161,10 @@ export const similarCodeTool: ToolDefinition = {
 				path: relPath,
 				startLine: startLine ?? null,
 				endLine: endLine ?? null,
-				hits: enriched,
+				maxTokens: fitted.maxTokens,
+				tokensUsed: fitted.tokensUsed,
+				truncated: fitted.truncated,
+				hits: fitted.kept,
 			}, null, 2),
 		};
 	},

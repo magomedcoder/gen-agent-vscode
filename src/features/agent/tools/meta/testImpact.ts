@@ -1,18 +1,19 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as vscode from 'vscode';
+import { getSettings } from '../../../../core/config/settings';
 import { AGENT_LIMITS, previewText } from '../../policy';
 import type { ToolContext, ToolDefinition, ToolResult } from '../../types';
 import { throwIfAborted } from '../../workspacePath';
 import { listIndexableFiles } from '../../../index/scanner';
-import { pathsFromGitPorcelain, suggestRelatedTests } from './testImpactCore';
+import { filterIgnoredPaths, pathsFromGitPorcelain, rankRelatedTests } from './testImpactCore';
 
 const execFileAsync = promisify(execFile);
 
 // По путям или git dirty - предложить связанные *test* / __tests__ файлы
 export const testImpactTool: ToolDefinition = {
 	name: 'test_impact',
-	description: 'По списку путей или git dirty предложить связанные тесты (*test*, *spec*, __tests__/). Не запускает тесты.',
+	description: 'По списку путей или git dirty предложить связанные тесты (*test*, *spec*, __tests__/). Не запускает тесты. Учитывает watcherIgnore + ignore[].',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -24,6 +25,11 @@ export const testImpactTool: ToolDefinition = {
 			use_git_dirty: {
 				type: 'boolean',
 				description: 'Взять dirty из git (по умолчанию true, если paths пуст)',
+			},
+			ignore: {
+				type: 'array',
+				items: { type: 'string' },
+				description: 'Доп. gitignore-подобные паттерны (поверх settings.watcherIgnore)',
 			},
 		},
 		additionalProperties: false,
@@ -67,20 +73,30 @@ export const testImpactTool: ToolDefinition = {
 			}
 		}
 
+		const extraIgnore = Array.isArray(args.ignore)
+			? args.ignore.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+			: [];
+		const ignorePatterns = [...getSettings().watcherIgnore, ...extraIgnore];
+		changed = filterIgnoredPaths(changed, ignorePatterns);
+
 		if (changed.length === 0) {
 			return {
 				ok: true,
-				content: JSON.stringify({ 
-					source, 
-					changed: [], 
-					relatedTests: [], 
-					note: 'Нет изменённых путей' 
+				content: JSON.stringify({
+					source,
+					changed: [],
+					relatedTests: [],
+					hits: [],
+					note: 'Нет изменённых путей (после ignore)',
 				}, null, 2),
 			};
 		}
 
-		const all = (await listIndexableFiles(folder)).map((f) => f.relative);
-		const relatedTests = suggestRelatedTests(changed, all);
+		const all = filterIgnoredPaths(
+			(await listIndexableFiles(folder)).map((f) => f.relative),
+			ignorePatterns,
+		);
+		const hits = rankRelatedTests(changed, all);
 
 		return {
 			ok: true,
@@ -89,8 +105,14 @@ export const testImpactTool: ToolDefinition = {
 					{
 						source,
 						changed: changed.slice(0, 80),
-						relatedTests,
-						hint: relatedTests.length
+						ignoredPatterns: ignorePatterns.slice(0, 40),
+						relatedTests: hits.map((h) => h.path),
+						hits: hits.map((h) => ({
+							path: h.path,
+							reason: h.reason,
+							score: h.score
+						})),
+						hint: hits.length
 							? 'Проверь эти тесты через run_tests или run_command'
 							: 'Связанные тесты не найдены эвристикой',
 					},

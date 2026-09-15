@@ -5,10 +5,40 @@ import { getSettings } from '../../core/config/settings';
 import { isProjectEnabled } from '../project/config';
 import { listIndexableFiles, readIndexableText } from './scanner';
 import { INDEX_DIR_RELATIVE } from './types';
-import { isJsLikeOutlinePath, parseOutlineDocumentJson, parseRegexOutlineFallback, parseTsOutline, searchOutlineEntries, summarizeOutlineForPath, applyOutlinePathRemove, applyOutlinePathUpdate, type OutlineDocument, type OutlineEntry } from './tsOutlineParse';
+import {
+	isJsLikeOutlinePath,
+	isRegexOutlineFallbackPath,
+	parseOutlineDocumentJson,
+	parseRegexOutlineFallback,
+	parseTsOutline,
+	preferLspOrRegexOutline,
+	outlineEntriesFromLspProviderResult,
+	searchOutlineEntries,
+	summarizeOutlineForPath,
+	applyOutlinePathRemove,
+	applyOutlinePathUpdate,
+	type OutlineDocument,
+	type OutlineEntry,
+} from './tsOutlineParse';
 
 export type { OutlineDocument, OutlineEntry } from './tsOutlineParse';
-export { isJsLikeOutlinePath, parseOutlineDocumentJson, parseRegexOutlineFallback, parseTsOutline, scoreOutlineQuery, searchOutlineEntries, summarizeOutlineForPath, applyOutlinePathRemove, applyOutlinePathUpdate } from './tsOutlineParse';
+export {
+	isJsLikeOutlinePath,
+	isRegexOutlineFallbackPath,
+	parseOutlineDocumentJson,
+	parseRegexOutlineFallback,
+	parseTsOutline,
+	preferLspOrRegexOutline,
+	mapLspSymbolKindToOutlineKind,
+	flattenLspDocumentSymbolsToOutline,
+	flattenLspSymbolInfosToOutline,
+	outlineEntriesFromLspProviderResult,
+	scoreOutlineQuery,
+	searchOutlineEntries,
+	summarizeOutlineForPath,
+	applyOutlinePathRemove,
+	applyOutlinePathUpdate,
+} from './tsOutlineParse';
 
 export const OUTLINE_INDEX_RELATIVE = '.gen/index/outline.json';
 
@@ -16,6 +46,7 @@ export const OUTLINE_INDEX_LIMITS = {
 	maxFiles: 400,
 	maxEntries: 12_000,
 	maxFileBytes: 400_000,
+	lspThrottleMs: 40,
 } as const;
 
 export function outlinePathForFolder(folderFsPath: string): string {
@@ -36,20 +67,78 @@ export async function saveOutlineIndex(folderFsPath: string, doc: OutlineDocumen
 	await fs.writeFile(outlinePathForFolder(folderFsPath), JSON.stringify(doc, null, 2), 'utf8');
 }
 
+/** Sync-extract: TS/JS через createSourceFile; остальные языки - только regex fallback. */
 export function extractOutlineForFile(relativePath: string, sourceText: string): OutlineEntry[] {
 	if (isJsLikeOutlinePath(relativePath)) {
 		return parseTsOutline(relativePath, sourceText);
 	}
 
-	// Другие языки: дешёвый regex-fallback (опционально)
-	const lower = relativePath.toLowerCase();
-	if (/\.(py|go|rs|java|kt|rb)$/.test(lower)) {
+	if (isRegexOutlineFallbackPath(relativePath)) {
 		return parseRegexOutlineFallback(relativePath, sourceText);
 	}
 	return [];
 }
 
-// Пересобрать `.gen/index/outline.json` из индексируемых TS/JS (и regex-fallback языков)
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * LSP DocumentSymbolProvider -> outline entries одного файла.
+ * Пусто, если нет provider / символов (caller может упасть на regex).
+ */
+export async function extractOutlineFromLsp(
+	relativePath: string,
+	uri: vscode.Uri,
+	maxEntries: number = OUTLINE_INDEX_LIMITS.maxEntries,
+): Promise<OutlineEntry[]> {
+	try {
+		const result = await vscode.commands.executeCommand<unknown>(
+			'vscode.executeDocumentSymbolProvider',
+			uri,
+		);
+		return outlineEntriesFromLspProviderResult(result, relativePath, maxEntries);
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Non-JS: сначала LSP; regex - last-resort, если LSP пуст и расширение поддерживает fallback.
+ * JS-like: только createSourceFile (без LSP).
+ */
+export async function extractOutlineForFileAsync(
+	relativePath: string,
+	uri: vscode.Uri,
+	sourceText: string | undefined,
+): Promise<OutlineEntry[]> {
+	if (isJsLikeOutlinePath(relativePath)) {
+		if (!sourceText) {
+			return [];
+		}
+		return parseTsOutline(relativePath, sourceText);
+	}
+
+	const remaining = OUTLINE_INDEX_LIMITS.maxEntries;
+	const lsp = await extractOutlineFromLsp(relativePath, uri, remaining);
+	if (lsp.length > 0) {
+		return lsp;
+	}
+
+	if (sourceText && isRegexOutlineFallbackPath(relativePath)) {
+		return preferLspOrRegexOutline(lsp, parseRegexOutlineFallback(relativePath, sourceText));
+	}
+
+	return [];
+}
+
+function clipText(text: string): string {
+	return text.length > OUTLINE_INDEX_LIMITS.maxFileBytes
+		? text.slice(0, OUTLINE_INDEX_LIMITS.maxFileBytes)
+		: text;
+}
+
+// Пересобрать `.gen/index/outline.json`: TS/JS createSourceFile; non-JS LSP (+ regex fallback)
 export async function rebuildOutlineIndex(folder: vscode.WorkspaceFolder): Promise<OutlineDocument> {
 	const files = await listIndexableFiles(folder);
 	const entries: OutlineEntry[] = [];
@@ -64,23 +153,27 @@ export async function rebuildOutlineIndex(folder: vscode.WorkspaceFolder): Promi
 			break;
 		}
 
-		if (
-			!isJsLikeOutlinePath(file.relative) &&
-			!/\.(py|go|rs|java|kt|rb)$/i.test(file.relative)
-		) {
+		if (!isOutlineablePath(file.relative)) {
 			continue;
 		}
 
 		try {
 			const text = await readIndexableText(file.uri);
-			if (!text) {
-				continue;
+			const clipped = text ? clipText(text) : undefined;
+			const remaining = OUTLINE_INDEX_LIMITS.maxEntries - entries.length;
+			let part: OutlineEntry[];
+
+			if (isJsLikeOutlinePath(file.relative)) {
+				part = clipped ? parseTsOutline(file.relative, clipped) : [];
+			} else {
+				const lsp = await extractOutlineFromLsp(file.relative, file.uri, remaining);
+				const regex = clipped && isRegexOutlineFallbackPath(file.relative)
+					? parseRegexOutlineFallback(file.relative, clipped)
+					: [];
+				part = preferLspOrRegexOutline(lsp, regex);
+				await sleep(OUTLINE_INDEX_LIMITS.lspThrottleMs);
 			}
 
-			const clipped = text.length > OUTLINE_INDEX_LIMITS.maxFileBytes
-					? text.slice(0, OUTLINE_INDEX_LIMITS.maxFileBytes)
-					: text;
-			const part = extractOutlineForFile(file.relative, clipped);
 			if (part.length === 0) {
 				continue;
 			}
@@ -128,7 +221,7 @@ function emptyOutlineDoc(): OutlineDocument {
 }
 
 function isOutlineablePath(relative: string): boolean {
-	return isJsLikeOutlinePath(relative) || /\.(py|go|rs|java|kt|rb)$/i.test(relative);
+	return isJsLikeOutlinePath(relative) || isRegexOutlineFallbackPath(relative);
 }
 
 // Per-file upsert в outline.json (без полного rebuild)
@@ -159,12 +252,8 @@ export async function updateOutlineIndexForFile(
 	let nextEntries: OutlineEntry[] = [];
 	try {
 		const text = await readIndexableText(uri);
-		if (text) {
-			const clipped = text.length > OUTLINE_INDEX_LIMITS.maxFileBytes
-				? text.slice(0, OUTLINE_INDEX_LIMITS.maxFileBytes)
-				: text;
-			nextEntries = extractOutlineForFile(relative, clipped);
-		}
+		const clipped = text ? clipText(text) : undefined;
+		nextEntries = await extractOutlineForFileAsync(relative, uri, clipped);
 	} catch {
 		nextEntries = [];
 	}

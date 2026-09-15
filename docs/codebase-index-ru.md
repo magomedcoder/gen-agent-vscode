@@ -16,7 +16,7 @@
 - Индекс пишется в `.gen/index/manifest.json` (files, chunks, trigrams, **dirDigests** Merkle-карта).
 - При обновлении пересчитываются digests предков; неизменённые каталоги пропускаются при совпадении путей + **content-hash** (size+mtime gate доверяет stored hash; одного size недостаточно).
 - LSP **symbol index** (кэш): `.gen/index/symbols.json` через `vscode.executeDocumentSymbolProvider`. Tools: `find_symbol` / `find_code` intent `symbol`, mention `@symbols`.
-- **TS/JS outline** (без Tree-sitter): `.gen/index/outline.json` через TypeScript `createSourceFile` (классы / функции / imports). Другие языки - regex fallback. Также в `find_symbol` (`source: outline|all`).
+- **Outline** (без Tree-sitter / native deps - для non-JS **только LSP**): `.gen/index/outline.json`. TS/JS через TypeScript `createSourceFile`; остальные языки через `vscode.executeDocumentSymbolProvider`, если провайдер есть; дешёвый regex fallback только если LSP пуст (`py`/`go`/`rs`/`java`/`kt`/`rb`). Также в `find_symbol` (`source: outline|all`).
 - `.gen/` не индексируется (как и `.git`, `node_modules` через ignore).
 - При изменении файла переиндексируется только он (сравнение content-hash); outline/symbols обновляются **per-file** (debounce), полный rebuild - только после full index.
 - Результаты `codebase_search` - фрагменты (path, строки, snippet, score).
@@ -29,7 +29,7 @@
 | `off`               | Только remote `/embeddings`                                                                                                    |
 | `trigram` (default) | Remote по возможности; при ошибке / отсутствии remote - fallback на триграммы IndexManager для `semantic_search` / `find_code` |
 
-Call hierarchy / «кто вызывает Y»: tool `find_references` (LSP references + definition).
+Call hierarchy / «кто вызывает Y»: tool `find_references` (LSP references + definition; multi-root через `folder`/`root`; paging `limit`/`offset`; cross-lang при наличии language server).
 
 ## Использование
 

@@ -105,8 +105,8 @@ function visitClassLike(
 }
 
 /**
- * Извлечь outline class / function / import из текста одного файла.
- * Другие языки: вызывающий код пропускает или использует regex-fallback отдельно.
+ * Извлечь outline class / function / import из текста одного файла (TS/JS).
+ * Non-JS: LSP в `extractOutlineFromLsp` / regex-fallback - отдельно.
  */
 export function parseTsOutline(relativePath: string, sourceText: string): OutlineEntry[] {
 	if (!isJsLikeOutlinePath(relativePath)) {
@@ -202,6 +202,202 @@ export function parseTsOutline(relativePath: string, sourceText: string): Outlin
 
 	visit(sf);
 	return out;
+}
+
+// Минимальная форма DocumentSymbol для чистых тестов (vscode.SymbolKind - числа)
+export interface LspOutlineSymbol {
+	name: string;
+	kind: number;
+	range: {
+		start: { line: number };
+		end: { line: number };
+	};
+	children?: LspOutlineSymbol[];
+}
+
+// Минимальная форма SymbolInformation (плоский ответ LSP)
+export interface LspOutlineSymbolInfo {
+	name: string;
+	kind: number;
+	location: {
+		range: {
+			start: { line: number };
+			end: { line: number };
+		};
+	};
+	containerName?: string;
+}
+
+// Map vscode.SymbolKind -> OutlineKind. undefined для шума (file/string/literal), children всё равно обходим
+export function mapLspSymbolKindToOutlineKind(kind: number): OutlineKind | undefined {
+	switch (kind) {
+		case 4: // Class
+		case 22: // Struct
+			return 'class';
+		case 10: // Interface
+			return 'interface';
+		case 25: // TypeParameter
+			return 'type';
+		case 9: // Enum
+			return 'enum';
+		case 11: // Function
+			return 'function';
+		case 5: // Method
+		case 8: // Constructor
+			return 'method';
+		case 6: // Property
+		case 7: // Field
+		case 12: // Variable
+		case 13: // Constant
+		case 21: // EnumMember
+			return 'variable';
+		case 1: // Module
+		case 2: // Namespace
+		case 3: // Package
+			return 'class';
+		default:
+			return undefined;
+	}
+}
+
+// Предпочитаем LSP outline; regex только если LSP ничего не вернул
+export function preferLspOrRegexOutline(
+	lspEntries: OutlineEntry[],
+	regexEntries: OutlineEntry[],
+): OutlineEntry[] {
+	return lspEntries.length > 0 ? lspEntries : regexEntries;
+}
+
+export function isRegexOutlineFallbackPath(relativePath: string): boolean {
+	return /\.(py|go|rs|java|kt|rb)$/i.test(relativePath);
+}
+
+function pushLspOutlineEntry(
+	out: OutlineEntry[],
+	relativePath: string,
+	name: string,
+	kind: number,
+	startLine0: number,
+	endLine0: number,
+	containerName: string | undefined,
+	maxEntries: number,
+): void {
+	if (out.length >= maxEntries) {
+		return;
+	}
+
+	const mapped = mapLspSymbolKindToOutlineKind(kind);
+	if (!mapped || !name.trim()) {
+		return;
+	}
+
+	out.push({
+		name,
+		kind: mapped,
+		path: relativePath,
+		startLine: startLine0 + 1,
+		endLine: endLine0 + 1,
+		containerName,
+	});
+}
+
+// Раскрыть дерево DocumentSymbol -> OutlineEntry[] (pure; без vscode)
+export function flattenLspDocumentSymbolsToOutline(
+	symbols: LspOutlineSymbol[],
+	relativePath: string,
+	maxEntries: number = 12_000,
+): OutlineEntry[] {
+	const out: OutlineEntry[] = [];
+
+	const walk = (items: LspOutlineSymbol[], containerName?: string): void => {
+		for (const s of items) {
+			if (out.length >= maxEntries) {
+				return;
+			}
+
+			pushLspOutlineEntry(
+				out,
+				relativePath,
+				s.name,
+				s.kind,
+				s.range.start.line,
+				s.range.end.line,
+				containerName,
+				maxEntries,
+			);
+
+			if (s.children?.length) {
+				walk(s.children, s.name);
+			}
+		}
+	};
+
+	walk(symbols);
+	return out;
+}
+
+// Раскрыть SymbolInformation[] -> OutlineEntry[] (pure; без vscode)
+export function flattenLspSymbolInfosToOutline(
+	infos: LspOutlineSymbolInfo[],
+	relativePath: string,
+	maxEntries: number = 12_000,
+): OutlineEntry[] {
+	const out: OutlineEntry[] = [];
+	for (const s of infos) {
+		if (out.length >= maxEntries) {
+			break;
+		}
+
+		pushLspOutlineEntry(
+			out,
+			relativePath,
+			s.name,
+			s.kind,
+			s.location.range.start.line,
+			s.location.range.end.line,
+			s.containerName,
+			maxEntries,
+		);
+	}
+	return out;
+}
+
+/**
+ * Нормализовать результат executeDocumentSymbolProvider (DocumentSymbol[] | SymbolInformation[]).
+ * Pure: принимает duck-typed формы.
+ */
+export function outlineEntriesFromLspProviderResult(
+	result: unknown,
+	relativePath: string,
+	maxEntries: number = 12_000,
+): OutlineEntry[] {
+	if (!Array.isArray(result) || result.length === 0) {
+		return [];
+	}
+
+	const first = result[0] as Record<string, unknown> | undefined;
+	if (!first || typeof first !== 'object') {
+		return [];
+	}
+
+	// DocumentSymbol: range + опциональные children; SymbolInformation: location
+	if ('location' in first && first.location && typeof first.location === 'object') {
+		return flattenLspSymbolInfosToOutline(
+			result as LspOutlineSymbolInfo[],
+			relativePath,
+			maxEntries,
+		);
+	}
+
+	if ('range' in first) {
+		return flattenLspDocumentSymbolsToOutline(
+			result as LspOutlineSymbol[],
+			relativePath,
+			maxEntries,
+		);
+	}
+
+	return [];
 }
 
 // Дешёвый regex-fallback для не-TS языков (Python/Go-ish)

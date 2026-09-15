@@ -137,9 +137,15 @@ export function findImportCycles(graph: Map<string, string[]>): string[][] {
 }
 
 const ENTRY_HINT = /(?:^|\/)(?:index|main|app|extension|activate)(?:\.[^/]+)?$/i;
+const ORPHAN_SKIP = /(?:\.d\.ts$|\/(?:dist|build|out|coverage|storybook|__mocks__|fixtures|generated|vendor)\b|\.stories\.|\.story\.|\.mock\.|\.config\.|\.min\.)/i;
 
-// Файлы, на которые никто не ссылается (кроме вероятных entrypoints)
-export function findOrphanFiles(graph: Map<string, string[]>): string[] {
+export type OrphanOptions = {
+	// Доп. gitignore-подобные паттерны (не считать orphans / не сканировать)
+	ignorePatterns?: readonly string[];
+};
+
+// Файлы, на которые никто не ссылается (кроме вероятных entrypoints / тестов / generated)
+export function findOrphanFiles(graph: Map<string, string[]>, opts?: OrphanOptions): string[] {
 	const imported = new Set<string>();
 	for (const deps of graph.values()) {
 		for (const d of deps) {
@@ -147,13 +153,24 @@ export function findOrphanFiles(graph: Map<string, string[]>): string[] {
 		}
 	}
 
+	const ignore = opts?.ignorePatterns ?? [];
 	const orphans: string[] = [];
 	for (const file of graph.keys()) {
 		if (imported.has(file)) {
 			continue;
 		}
-		
-		if (ENTRY_HINT.test(file) || file.includes('/test/') || file.includes('.test.') || file.includes('.spec.')) {
+
+		if (
+			ENTRY_HINT.test(file)
+			|| file.includes('/test/')
+			|| file.includes('.test.')
+			|| file.includes('.spec.')
+			|| ORPHAN_SKIP.test(file)
+		) {
+			continue;
+		}
+
+		if (ignore.length > 0 && matchesIgnorePatterns(file, ignore)) {
 			continue;
 		}
 
@@ -163,6 +180,62 @@ export function findOrphanFiles(graph: Map<string, string[]>): string[] {
 	return orphans.sort().slice(0, 200);
 }
 
+export function matchesIgnorePatterns(rel: string, patterns: readonly string[]): boolean {
+	const p = rel.replace(/\\/g, '/').replace(/^\.\//, '');
+	for (const raw of patterns) {
+		const pat = raw.trim().replace(/\\/g, '/');
+		if (!pat || pat.startsWith('#')) {
+			continue;
+		}
+
+		if (pat.endsWith('/')) {
+			const dir = pat.slice(0, -1);
+			if (p === dir || p.startsWith(`${dir}/`)) {
+				return true;
+			}
+			continue;
+		}
+
+		if (pat.startsWith('*.')) {
+			if (p.endsWith(pat.slice(1))) {
+				return true;
+			}
+			continue;
+		}
+
+		if (pat.includes('*')) {
+			const escaped = pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*');
+			if (new RegExp(`^${escaped}$`).test(p)) {
+				return true;
+			}
+			continue;
+		}
+
+		if (p === pat || p.startsWith(`${pat}/`) || p.endsWith(`/${pat}`)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 export function isJsLikePath(rel: string): boolean {
 	return JS_EXT.test(rel);
+}
+
+// Ключ кэша отчёта: число файлов + простой digest путей
+export function repoHealthCacheKey(
+	paths: readonly string[],
+	ignorePatterns: readonly string[],
+): string {
+	const joined = [...paths].sort().join('\n');
+	const ign = [...ignorePatterns].map((s) => s.trim()).filter(Boolean).sort().join('\n');
+	let h = 2166136261;
+	const s = `${joined}\n#\n${ign}`;
+	for (let i = 0; i < s.length; i += 1) {
+		h ^= s.charCodeAt(i);
+		h = Math.imul(h, 16777619);
+	}
+	
+	return `${paths.length}:${(h >>> 0).toString(16)}`;
 }

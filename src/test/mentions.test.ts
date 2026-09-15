@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { parseMentions, stripMentions } from '../features/chat/mentions.js';
+import { formatMentionPathArg, parseMentions, stripMentions } from '../features/chat/mentions.js';
 import { packContext, type ContextHit } from '../features/index/contextEngine.js';
 
 suite('parseMentions', () => {
@@ -25,6 +25,34 @@ suite('parseMentions', () => {
 		const mentions = parseMentions('@file:`src/x.ts` @folder:lib');
 		assert.strictEqual(mentions[0].arg, 'src/x.ts');
 		assert.strictEqual(mentions[1].arg, 'lib');
+	});
+
+	test('пути с пробелами: кавычки и backticks', () => {
+		const text = 'открой @file "my dir/a file.ts" и @folder:\'other folder\' плюс @file:`spaced path/x.ts` и @file:"q w/z.ts"';
+		const mentions = parseMentions(text);
+		assert.strictEqual(mentions.length, 4);
+		assert.strictEqual(mentions[0]!.kind, 'file');
+		assert.strictEqual(mentions[0]!.arg, 'my dir/a file.ts');
+		assert.strictEqual(mentions[1]!.kind, 'folder');
+		assert.strictEqual(mentions[1]!.arg, 'other folder');
+		assert.strictEqual(mentions[2]!.kind, 'file');
+		assert.strictEqual(mentions[2]!.arg, 'spaced path/x.ts');
+		assert.strictEqual(mentions[3]!.kind, 'file');
+		assert.strictEqual(mentions[3]!.arg, 'q w/z.ts');
+		assert.strictEqual(stripMentions(text, mentions), 'открой и плюс и');
+	});
+
+	test('неломает unquoted mentions без пробелов', () => {
+		const mentions = parseMentions('@file src/a.ts @folder lib @codebase auth');
+		assert.strictEqual(mentions.length, 3);
+		assert.strictEqual(mentions[0]!.arg, 'src/a.ts');
+		assert.strictEqual(mentions[1]!.arg, 'lib');
+		assert.strictEqual(mentions[2]!.arg, 'auth');
+	});
+
+	test('formatMentionPathArg квотит только пути с пробелами', () => {
+		assert.strictEqual(formatMentionPathArg('src/a.ts'), 'src/a.ts');
+		assert.strictEqual(formatMentionPathArg('my dir/a.ts'), '"my dir/a.ts"');
 	});
 
 	test('разбирает @code @Docs @agent без поломки @codebase', () => {

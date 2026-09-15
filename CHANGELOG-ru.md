@@ -8,6 +8,11 @@
 - **MCP:** Reconnect / Refresh tools по серверу, badge connecting, lastConnectedAt; lazy reconnect на call; AbortSignal cancel; `mcpToolResultMaxChars` (default 50000)
 - **Permissions:** opt-in `persistAlwaysAllow` - Always-паттерны переживают reload (workspaceState); список/очистка в Permissions
 - **Index:** Merkle `dirDigests` content-hash skip (size+mtime gate; одного path+size недостаточно); инкрементальные outline/symbols per-file (debounce watcher; full rebuild после fullIndex)
+- **Outline:** multi-language MVP - non-JS через LSP `DocumentSymbolProvider` (без Tree-sitter); TS/JS по-прежнему `createSourceFile`; regex fallback только если LSP пуст
+- **Tools:** `repo_health` / `test_impact` - меньше false positives, `ignore[]` + `watcherIgnore`, кэш отчёта 60s, ranked hits с reason/score
+- **Tools:** `pack_context` / `similar_code` - budget токенов (`max_tokens` / `maxTokens`) с eviction низкого score; provenance в каждом hit (path, range, tool, reason, score, estimatedTokens); у `pack_context` в JSON есть `hits` (поле `text` сохранено)
+- **Tools:** `find_references` multi-root (`folder`/`root`), опциональный path (workspace symbols), paging `limit`/`offset`/`page` + `total`/`hasMore`/`nextOffset`
+- **Mentions:** пути с пробелами через кавычки / backticks (`@file "my dir/a.ts"`, `@file:"..."`, `` @file:`...` ``); autocomplete и paste квотят такие пути; unquoted без изменений
 
 ## 0.4.0 (11 сентября 2026)
 

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getSettings } from '../../core/config/settings';
 import { deniedDirectoryExcludeGlob } from '../agent/policy';
-import type { MentionKind } from './mentions';
+import { formatMentionPathArg, type MentionKind } from './mentions';
 import { getSessionPeek } from './sessionStore';
 import { loadReferenceDefs } from '../project/references';
 
@@ -402,14 +402,14 @@ export async function suggestMentions(query: string): Promise<MentionSuggestion[
 			out.push({
 				kind: 'folder',
 				label: dir,
-				insert: `@folder ${dir} `,
+				insert: `@folder ${formatMentionPathArg(dir)} `,
 				detail: vscode.l10n.t('chat.mention.kind.folder'),
 			});
 		} else {
 			out.push({
 				kind: 'file',
 				label: relative,
-				insert: `@file ${relative} `,
+				insert: `@file ${formatMentionPathArg(relative)} `,
 				detail: vscode.l10n.t('chat.mention.kind.file'),
 			});
 		}

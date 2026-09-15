@@ -16,7 +16,7 @@ The agent searches it via the `codebase_search` tool (trigrams), without sending
 - The index is written to `.gen/index/manifest.json` (files, chunks, trigrams, **dirDigests** Merkle map).
 - On update, ancestor directory digests are recomputed; unchanged dirs skip re-read when paths + **content-hash** match (size+mtime gate trusts the stored hash; size alone is not enough).
 - LSP **symbol index** (optional cache): `.gen/index/symbols.json` via `vscode.executeDocumentSymbolProvider`. Used by `find_symbol` / `find_code` intent `symbol` and `@symbols`.
-- **TS/JS outline** (no Tree-sitter): `.gen/index/outline.json` via TypeScript `createSourceFile` (classes / functions / imports). Other languages use a cheap regex fallback. Also exposed via `find_symbol` (`source: outline|all`).
+- **Outline** (no Tree-sitter / no native deps - **LSP-only** for non-JS): `.gen/index/outline.json`. TS/JS via TypeScript `createSourceFile`; other languages via `vscode.executeDocumentSymbolProvider` when available; cheap regex fallback only if LSP returns empty (`py`/`go`/`rs`/`java`/`kt`/`rb`). Also exposed via `find_symbol` (`source: outline|all`).
 - `.gen/` is not indexed (same for `.git`, `node_modules` via ignore).
 - On file change, only that file is reindexed (content-hash compare); outline/symbols update **per-file** (debounced), full rebuild only after a complete index pass.
 - `codebase_search` results are fragments (path, lines, snippet, score).
@@ -29,7 +29,7 @@ The agent searches it via the `codebase_search` tool (trigrams), without sending
 | `off`               | Remote `/embeddings` only                                                                                          |
 | `trigram` (default) | Prefer remote; when remote is missing or fails, `semantic_search` / `find_code` fall back to IndexManager trigrams |
 
-Call hierarchy / “who calls Y”: tool `find_references` (LSP reference + definition providers).
+Call hierarchy / “who calls Y”: tool `find_references` (LSP reference + definition providers; multi-root via `folder`/`root`; `limit`/`offset` paging; cross-lang when a language server is available).
 
 ## Usage
 

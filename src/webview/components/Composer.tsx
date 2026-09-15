@@ -146,7 +146,14 @@ function chipFromInsert(insert: string): ContextChip {
 	const m = /^@(\w+)/i.exec(trimmed);
 	const rawKind = (m?.[1] ?? 'file').toLowerCase().replace(/-/g, '_') as MentionSuggestion['kind'];
 	const kind = MENTION_KINDS.has(rawKind) ? rawKind : 'file';
-	const arg = trimmed.replace(/^@\w+/i, '').replace(/^[:\s]+/, '').trim();
+	let arg = trimmed.replace(/^@\w+/i, '').replace(/^[:\s]+/, '').trim();
+	if (arg.length >= 2) {
+		const a = arg[0];
+		const b = arg[arg.length - 1];
+		if ((a === '"' && b === '"') || (a === "'" && b === "'") || (a === '`' && b === '`')) {
+			arg = arg.slice(1, -1).trim();
+		}
+	}
 	const label = arg.split(/[/\\]/).filter(Boolean).pop() || trimmed;
 	return {
 		id: trimmed,
@@ -154,6 +161,23 @@ function chipFromInsert(insert: string): ContextChip {
 		label,
 		insert: trimmed,
 	};
+}
+
+function quoteMentionPathArg(path: string): string {
+	const p = path.trim();
+	if (!/[\s@]/.test(p)) {
+		return p;
+	}
+
+	if (!p.includes('"')) {
+		return `"${p}"`;
+	}
+
+	if (!p.includes("'")) {
+		return `'${p}'`;
+	}
+
+	return `\`${p.replace(/`/g, '')}\``;
 }
 
 function slashDetail(cmd: SlashCommand): string {
@@ -192,7 +216,7 @@ function looksLikeFilePath(text: string): string | undefined {
 	}
 
 	const path = normalizePastedPath(text);
-	if (!path || /\s/.test(path)) {
+	if (!path) {
 		return undefined;
 	}
 
@@ -203,8 +227,8 @@ function looksLikeFilePath(text: string): string | undefined {
 
 	const hasSep = /[/\\]/.test(path) || /^[A-Za-z]:\//.test(path) || path.startsWith('~/') || path.startsWith('./') || path.startsWith('../');
 	const hasExt = /\.[A-Za-z0-9]{1,12}$/.test(path);
-	// Допустимые символы пути (без пробелов для MVP - mention arg = [^\s@]+)
-	if (!/^[\w./:@~+-]+$/.test(path) && !/^[A-Za-z]:\/[\w./@~+-]*$/.test(path)) {
+	// Пути с пробелами ок - insert обернёт в кавычки (@file "a b.ts")
+	if (!/^[\w./:@~+\-\s]+$/.test(path) && !/^[A-Za-z]:\/[\w./@~+\-\s]*$/.test(path)) {
 		return undefined;
 	}
 
@@ -411,12 +435,11 @@ export function Composer({
 	};
 
 	const addFilePathChip = (path: string) => {
-		// Формат как в mentionSuggest: `@file ${relative}`
-		const insert = `@file ${path}`;
+		const insert = `@file ${quoteMentionPathArg(path)}`;
 		const chip: ContextChip = {
 			id: insert,
 			kind: 'file',
-			label: path,
+			label: path.split(/[/\\]/).filter(Boolean).pop() || path,
 			insert,
 		};
 		setChips((prev) => (prev.some((c) => c.id === chip.id) ? prev : [...prev, chip]));

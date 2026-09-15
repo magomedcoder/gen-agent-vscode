@@ -37,18 +37,42 @@ export interface ResolvedMentions {
 
 // codebase раньше code - иначе @codebase сматчится как @code + arg "base"
 // git_changes раньше git ; problems - argless
-const MENTION_RE = /@(file|folder|codebase|code|git-changes|git_changes|git|branch_diff|problems|rules|link|docs|agent|terminals|past|alias|ref|map|symbols)(?:\s+`([^`]+)`|:`([^`]+)`|:([^\s`]+)|(?:\s+)([^\s@]+))?/gi;
+// Args: backticks / "double" / 'single' (через пробел или :); без кавычек = [^\s@]+ (без пробелов)
+const MENTION_RE =
+	/@(file|folder|codebase|code|git-changes|git_changes|git|branch_diff|problems|rules|link|docs|agent|terminals|past|alias|ref|map|symbols)(?:\s+`([^`]+)`|\s+"([^"]+)"|\s+'([^']+)'|:`([^`]+)`|:"([^"]+)"|:'([^']+)'|:([^\s`"']+)|(?:\s+)([^\s@]+))?/gi;
 
 // Kinds без аргумента: не глотать следующее слово как arg
 const ARGLESS_MENTION_KINDS = new Set<MentionKind>(['code', 'git', 'branch_diff', 'git_changes', 'problems', 'rules', 'terminals', 'map']);
 
-function stripOuterBackticks(value: string): string {
+function stripOuterQuotes(value: string): string {
 	const t = value.trim();
-	if (t.length >= 2 && t.startsWith('`') && t.endsWith('`')) {
-		return t.slice(1, -1).trim();
+	if (t.length >= 2) {
+		const a = t[0];
+		const b = t[t.length - 1];
+		if ((a === '`' && b === '`') || (a === '"' && b === '"') || (a === "'" && b === "'")) {
+			return t.slice(1, -1).trim();
+		}
 	}
 
 	return t;
+}
+
+// Обернуть путь в кавычки для insert @file / @folder, если есть пробелы
+export function formatMentionPathArg(path: string): string {
+	const p = path.trim();
+	if (!/[\s@]/.test(p)) {
+		return p;
+	}
+
+	if (!p.includes('"')) {
+		return `"${p}"`;
+	}
+
+	if (!p.includes("'")) {
+		return `'${p}'`;
+	}
+
+	return `\`${p.replace(/`/g, '')}\``;
 }
 
 function git(args: string[]): Promise<string> {
@@ -457,11 +481,13 @@ export function parseMentions(text: string): ParsedMention[] {
 		}
 		const rawMatch = match[0];
 		const start = match.index ?? 0;
-		let arg = (match[2] ?? match[3] ?? match[4] ?? match[5] ?? '').trim() || undefined;
+		// группы: ` / " / ' (пробел), затем ` / " / ' (:), затем :без_кавычек / пробел-без_кавычек
+		let arg = (match[2] ?? match[3] ?? match[4] ?? match[5] ?? match[6] ?? match[7] ?? match[8] ?? match[9] ?? '').trim() || undefined;
 		let end = start + rawMatch.length;
 
 		// kinds без arg: не съедать следующее слово (`@terminals что` * только @terminals)
-		if (ARGLESS_MENTION_KINDS.has(kind) && arg && !rawMatch.includes('`') && !rawMatch.includes(':')) {
+		const explicitlyQuoted = /[`"']/.test(rawMatch) || rawMatch.includes(':');
+		if (ARGLESS_MENTION_KINDS.has(kind) && arg && !explicitlyQuoted) {
 			const kindOnly = kind === 'git_changes' ? '@git-changes' : `@${kind}`;
 			arg = undefined;
 			end = start + kindOnly.length;
@@ -476,7 +502,7 @@ export function parseMentions(text: string): ParsedMention[] {
 		}
 
 		if (arg) {
-			arg = stripOuterBackticks(arg) || undefined;
+			arg = stripOuterQuotes(arg) || undefined;
 		}
 
 		out.push({

@@ -8,6 +8,11 @@
 - **MCP:** per-server Reconnect / Refresh tools, connecting badge, lastConnectedAt; lazy reconnect on call (no full refresh); AbortSignal cancel; `mcpToolResultMaxChars` (default 50000)
 - **Permissions:** opt-in `persistAlwaysAllow` - Always patterns survive reloads (workspaceState); Permissions UI list/clear
 - **Index:** Merkle `dirDigests` content-hash skip (size+mtime gate; path+size alone no longer skips); incremental outline/symbols per-file (debounced watcher; full rebuild after fullIndex)
+- **Outline:** multi-language MVP - non-JS via LSP `DocumentSymbolProvider` (no Tree-sitter); TS/JS still `createSourceFile`; regex fallback only when LSP empty
+- **Tools:** `repo_health` / `test_impact` - fewer false positives, `ignore[]` + `watcherIgnore`, 60s report cache, ranked test hits with reason/score
+- **Tools:** `pack_context` / `similar_code` - token budget (`max_tokens` / `maxTokens`) with lowest-score eviction; structured provenance on each hit (path, line range, tool, reason, score, estimatedTokens); `pack_context` JSON now includes `hits` (+ keeps `text`)
+- **Tools:** `find_references` multi-root (`folder`/`root`), optional path (workspace symbols), `limit`/`offset`/`page` paging with `total`/`hasMore`/`nextOffset`
+- **Mentions:** paths with spaces via quotes / backticks (`@file "my dir/a.ts"`, `@file:"..."`, `` @file:`...` ``); autocomplete and paste quote spaced paths; unquoted mentions unchanged
 
 ## 0.4.0 (11 September 2026)
 

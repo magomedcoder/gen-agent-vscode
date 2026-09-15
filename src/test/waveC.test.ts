@@ -48,13 +48,52 @@ suite('Wave C helpers', () => {
 				'src/features/agent/auth.test.ts',
 				'src/test/auth.test.ts',
 				'src/other.ts',
+				'src/features/agent/authorization.test.ts',
 			],
 		);
-		assert.ok(related.some((p) => p.includes('auth') && isTestPath(p)));
+		assert.ok(related.includes('src/features/agent/auth.test.ts'));
+		// слабый substring auth ⊂ authorization больше не должен ложно срабатывать как единственный hit
+		assert.ok(related[0] === 'src/features/agent/auth.test.ts' || related.includes('src/features/agent/auth.test.ts'));
 		assert.deepStrictEqual(
 			pathsFromGitPorcelain(' M src/a.ts\n?? src/b.ts\nR  old.ts -> new.ts\n'),
 			['src/a.ts', 'src/b.ts', 'new.ts'],
 		);
+	});
+
+	test('test_impact ignores weak stem false positives', () => {
+		const related = suggestRelatedTests(
+			['src/index.ts'],
+			[
+				'src/index.ts',
+				'src/foo.test.ts',
+				'src/bar.spec.ts',
+				'src/index.test.ts',
+			],
+		);
+		assert.deepStrictEqual(related, ['src/index.test.ts']);
+	});
+
+	test('repo_health orphan skip + ignore patterns', () => {
+		const files = [
+			{
+				path: 'src/a.ts',
+				source: "export const a = 1;\n"
+			},
+			{
+				path: 'src/a.stories.tsx',
+				source: "export default {};\n"
+			},
+			{
+				path: 'src/vendor/x.ts',
+				source: "export const x = 1;\n"
+			},
+		];
+		const graph = buildImportGraph(files);
+		const orphans = findOrphanFiles(graph);
+		assert.ok(orphans.includes('src/a.ts'));
+		assert.ok(!orphans.includes('src/a.stories.tsx'));
+		const filtered = findOrphanFiles(graph, { ignorePatterns: ['src/vendor/'] });
+		assert.ok(!filtered.includes('src/vendor/x.ts'));
 	});
 
 	test('design visual stub rejects click-to-code', () => {

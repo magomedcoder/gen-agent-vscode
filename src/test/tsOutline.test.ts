@@ -1,5 +1,21 @@
 import * as assert from 'node:assert';
-import { parseTsOutline, parseRegexOutlineFallback, isJsLikeOutlinePath, scoreOutlineQuery, searchOutlineEntries, summarizeOutlineForPath, applyOutlinePathUpdate, applyOutlinePathRemove, type OutlineDocument } from '../features/index/tsOutlineParse.js';
+import {
+	parseTsOutline,
+	parseRegexOutlineFallback,
+	isJsLikeOutlinePath,
+	isRegexOutlineFallbackPath,
+	mapLspSymbolKindToOutlineKind,
+	flattenLspDocumentSymbolsToOutline,
+	flattenLspSymbolInfosToOutline,
+	outlineEntriesFromLspProviderResult,
+	preferLspOrRegexOutline,
+	scoreOutlineQuery,
+	searchOutlineEntries,
+	summarizeOutlineForPath,
+	applyOutlinePathUpdate,
+	applyOutlinePathRemove,
+	type OutlineDocument,
+} from '../features/index/tsOutlineParse.js';
 
 suite('tsOutlineParse', () => {
 	test('isJsLikeOutlinePath', () => {
@@ -7,6 +23,161 @@ suite('tsOutlineParse', () => {
 		assert.strictEqual(isJsLikeOutlinePath('x.tsx'), true);
 		assert.strictEqual(isJsLikeOutlinePath('a.py'), false);
 	});
+
+	test('isRegexOutlineFallbackPath', () => {
+		assert.strictEqual(isRegexOutlineFallbackPath('a.py'), true);
+		assert.strictEqual(isRegexOutlineFallbackPath('main.go'), true);
+		assert.strictEqual(isRegexOutlineFallbackPath('a.ts'), false);
+	});
+
+	test('mapLspSymbolKindToOutlineKind', () => {
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(4), 'class'); // Class
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(22), 'class'); // Struct
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(10), 'interface');
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(9), 'enum');
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(11), 'function');
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(5), 'method');
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(8), 'method'); // Constructor
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(12), 'variable');
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(13), 'variable'); // Constant
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(25), 'type'); // TypeParameter
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(1), 'class'); // Module
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(0), undefined); // File
+		assert.strictEqual(mapLspSymbolKindToOutlineKind(14), undefined); // String
+	});
+
+	test('flattenLspDocumentSymbolsToOutline walks children + 1-based lines', () => {
+		const entries = flattenLspDocumentSymbolsToOutline(
+			[
+				{
+					name: 'Widget',
+					kind: 4,
+					range: {
+						start: {
+							line: 0
+						},
+						end: {
+							line: 10
+						}
+					},
+					children: [
+						{
+							name: 'render',
+							kind: 5,
+							range: {
+								start: {
+									line: 2
+								},
+								end: {
+									line: 4
+								}
+							},
+						},
+					],
+				},
+			],
+			'src/a.py',
+		);
+		assert.strictEqual(entries.length, 2);
+		assert.deepStrictEqual(
+			entries.map((e) => `${e.kind}:${e.name}:${e.startLine}:${e.containerName ?? ''}`),
+			['class:Widget:1:', 'method:render:3:Widget'],
+		);
+	});
+
+	test('flattenLspSymbolInfosToOutline', () => {
+		const entries = flattenLspSymbolInfosToOutline(
+			[
+				{
+					name: 'helper',
+					kind: 11,
+					location: {
+						range: {
+							start: {
+								line: 4
+							},
+							end: {
+								line: 6
+							}
+						}
+					},
+					containerName: 'mod',
+				},
+			],
+			'main.go',
+		);
+		assert.strictEqual(entries.length, 1);
+		assert.strictEqual(entries[0]?.kind, 'function');
+		assert.strictEqual(entries[0]?.startLine, 5);
+		assert.strictEqual(entries[0]?.containerName, 'mod');
+	});
+
+	test('outlineEntriesFromLspProviderResult detects DocumentSymbol vs SymbolInformation', () => {
+		const fromDoc = outlineEntriesFromLspProviderResult([
+			{
+				name: 'A',
+				kind: 4,
+				range: {
+					start: {
+						line: 0
+					},
+					end: {
+						line: 1
+					}
+				},
+				children: []
+			}
+		], 'a.py');
+		assert.strictEqual(fromDoc[0]?.kind, 'class');
+
+		const fromInfo = outlineEntriesFromLspProviderResult(
+			[
+				{
+					name: 'B',
+					kind: 11,
+					location: { 
+						range: { 
+							start: { 
+								line: 1
+							},
+							end: {
+								line: 2
+							}
+						}
+					},
+				},
+			],
+			'b.go',
+		);
+		assert.strictEqual(fromInfo[0]?.kind, 'function');
+		assert.deepStrictEqual(outlineEntriesFromLspProviderResult([], 'x.py'), []);
+		assert.deepStrictEqual(outlineEntriesFromLspProviderResult(undefined, 'x.py'), []);
+	});
+
+	test('preferLspOrRegexOutline - LSP wins; regex when LSP empty', () => {
+		const lsp = [
+			{
+				name: 'FromLsp',
+				kind: 'function' as const,
+				path: 'a.py',
+				startLine: 1,
+				endLine: 2
+			},
+		];
+		const regex = [
+			{
+				name: 'FromRegex',
+				kind: 'function' as const,
+				path: 'a.py',
+				startLine: 1,
+				endLine: 1
+			},
+		];
+		assert.strictEqual(preferLspOrRegexOutline(lsp, regex)[0]?.name, 'FromLsp');
+		assert.strictEqual(preferLspOrRegexOutline([], regex)[0]?.name, 'FromRegex');
+		assert.deepStrictEqual(preferLspOrRegexOutline([], []), []);
+	});
+
 
 	test('extracts imports, class, function from TS', () => {
 		const src = `
