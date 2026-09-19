@@ -364,6 +364,9 @@ export class ChatSession {
 					alwaysLabel: this.pendingConfirm.alwaysLabel,
 					suggestion: this.pendingConfirm.suggestion,
 					allowAlways: this.pendingConfirm.allowAlways,
+					allowRemaining: this.pendingConfirm.allowRemaining,
+					allowRemainingLabel: this.pendingConfirm.allowRemainingLabel,
+					remainingEdits: this.pendingConfirm.remainingEdits,
 				}
 				: undefined,
 			pendingQuestion: this.pendingQuestion
@@ -760,6 +763,8 @@ export class ChatSession {
 		rejectLabel?: string;
 		suggestion?: string;
 		allowAlways?: boolean;
+		allowRemaining?: boolean;
+		remainingEdits?: number;
 	}, sessionId?: string): Promise<ConfirmChoice> {
 		const sid = sessionId ?? this.sessions.getCurrentSessionId();
 		this.focusSession(sid);
@@ -772,6 +777,7 @@ export class ChatSession {
 		void focusChatView().then(undefined, () => undefined);
 
 		const variant = request.variant ?? 'agent';
+		const remainingEdits = request.remainingEdits ?? 0;
 		return new Promise<ConfirmChoice>((resolve) => {
 			this.pendingConfirm = {
 				id: messageId(),
@@ -786,6 +792,11 @@ export class ChatSession {
 				alwaysLabel: vscode.l10n.t('agent.confirmAlways'),
 				suggestion: request.suggestion,
 				allowAlways: request.allowAlways,
+				allowRemaining: request.allowRemaining,
+				allowRemainingLabel: request.allowRemaining
+					? vscode.l10n.t('agent.confirmAllowRemaining', remainingEdits)
+					: undefined,
+				remainingEdits: request.allowRemaining ? remainingEdits : undefined,
 				resolve,
 			};
 			this.emit();

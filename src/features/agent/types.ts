@@ -7,7 +7,7 @@ import type { DiffHunkPayload } from './diff';
 import type { StickyPlan } from './plan';
 import type { AgentWriteTracker } from './userEdits';
 
-export type ConfirmChoice = 'apply' | 'skip' | 'abort' | 'always';
+export type ConfirmChoice = 'apply' | 'skip' | 'abort' | 'always' | 'allow_remaining';
 
 export interface ToolContext {
 	signal?: AbortSignal;
@@ -17,6 +17,9 @@ export interface ToolContext {
 		hint?: string;
 		suggestion?: string;
 		allowAlways?: boolean;
+		// Кнопка «Allow remaining edits» при очереди edits в одном turn
+		allowRemaining?: boolean;
+		remainingEdits?: number;
 		variant?: 'agent' | 'binary';
 		applyLabel?: string;
 		skipLabel?: string;
@@ -28,6 +31,8 @@ export interface ToolContext {
 	onPlanChanged?(): void;
 	checkpoint?: AgentCheckpoint;
 	writes?: AgentWriteTracker;
+	// Потоковый stdout/stderr long shell -> UI (без гонок: только пока tool активен)
+	onPartialOutput?(text: string): void;
 }
 
 export interface ToolResult {

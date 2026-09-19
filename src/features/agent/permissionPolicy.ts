@@ -176,12 +176,13 @@ export function evaluateApproval(
 	const ruleCfg = policy[action] ?? DEFAULT_APPROVAL_POLICY[action];
 	const key = `${action}:${subject}`;
 
-	if (sessionAllow?.some((item) => matchPattern(item, key) || matchPattern(item, subject))) {
-		return 'allow';
-	}
-
+	// Denylist сильнее Always/sessionAllow (явный запрет не обходится кнопкой Always)
 	if (listHit(ruleCfg.denylist, subject)) {
 		return 'deny';
+	}
+
+	if (sessionAllow?.some((item) => matchPattern(item, key) || matchPattern(item, subject))) {
+		return 'allow';
 	}
 
 	if (listHit(ruleCfg.allowlist, subject)) {

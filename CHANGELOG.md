@@ -18,6 +18,10 @@
 - **Eval:** retrieval quality gate (precision@k / hit-rate / simpleScore, fail thresholds) on offline trigram corpus + merge fixtures; permissions/confirm smoke in `src/test/eval/`; run `npm test -- --grep eval` or `npm run test:eval` (no remote embeddings)
 - **Mentions:** `@Docs` / `@past` / `@terminals` - rank by query/arg relevance + per-kind token quotas (docs 3k / past 2.5k / terminals 2.5k) with lowest-score eviction before turn-level `fitMentionsToBudget`
 - **Slash:** `$ARGUMENTS` / `$n` validation + frontmatter `arguments:` hint; autocomplete leaves `/cmd ` ready for args
+- **Tests:** permission confirm matrix (ask/deny/always/skip/abort * edits/shell + mcp/web stubs; toolsFallback Continue/Stop; continueLoopOnDeny) via pure `confirmDecision` helpers - no live LLM
+- **Permissions:** unified edit confirm pipeline - no duplicate Always/Apply after central ask/review (`shouldSkipToolConfirm` / `skipConfirm`); stable `awaiting_confirm` + busyDetail; overwrite-user-edits still forces confirm; compatible with batch Allow remaining
+- **Permissions:** batch edit confirm - several edits in one turn get **Allow remaining edits** on ConfirmCard (turn-scoped; Always / Reject / review diff unchanged; shell and sensitive `.env*` still ask)
+- **Shell:** streaming partial stdout/stderr for long `run_command` / `run_tests` / `run_scratch` (tool card + busyDetail, 120ms throttle); AbortSignal cancel without status races
 
 ## 0.4.0 (11 September 2026)
 

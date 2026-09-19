@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../../types';
 import { pathExists, resolveWorkspacePath, throwIfAborted } from '../../workspacePath';
-import { runShellCommand } from '../../shellExec';
+import { runShellCommand, formatPartialShellPreview } from '../../shellExec';
 import { confirmAlwaysOrSkip } from '../confirm';
 import { toPosixRelative } from '../../policy';
 
@@ -104,6 +104,17 @@ export const runScratchTool: ToolDefinition = {
 			cwd,
 			timeoutMs,
 			signal: ctx.signal,
+			onPartialOutput: ctx.onPartialOutput
+				? (raw) => {
+					ctx.onPartialOutput!(
+						formatPartialShellPreview({
+							commandLine,
+							cwd,
+							raw,
+						}),
+					);
+				}
+				: undefined,
 		});
 
 		return {

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { detectTestCommand } from '../../detectTestCommand';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../../types';
 import { resolveCommandCwd, throwIfAborted } from '../../workspacePath';
-import { runShellCommand } from '../../shellExec';
+import { runShellCommand, formatPartialShellPreview } from '../../shellExec';
 import { confirmAlwaysOrSkip } from '../confirm';
 
 export const runTestsTool: ToolDefinition = {
@@ -43,12 +43,18 @@ export const runTestsTool: ToolDefinition = {
 			};
 		}
 
+		const commandLine = `${detected.command} ${detected.args.join(' ')}`.trim();
 		const result = await runShellCommand({
 			command: detected.command,
 			args: detected.args,
 			cwd,
 			timeoutMs: asOptionalInt(args, 'timeout_ms') ?? 120_000,
 			signal: ctx.signal,
+			onPartialOutput: ctx.onPartialOutput
+				? (raw) => {
+					ctx.onPartialOutput!(`${detected.label}\n${formatPartialShellPreview({ commandLine, cwd, raw })}`);
+				}
+				: undefined,
 		});
 
 		return {

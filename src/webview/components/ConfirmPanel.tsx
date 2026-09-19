@@ -13,6 +13,9 @@ export interface ConfirmPanelProps {
 	alwaysLabel?: string;
 	suggestion?: string;
 	allowAlways?: boolean;
+	allowRemaining?: boolean;
+	allowRemainingLabel?: string;
+	remainingEdits?: number;
 	badge?: string;
 	className?: string;
 	onChoose: (choice: ConfirmChoice) => void;
@@ -30,6 +33,9 @@ export function ConfirmPanel({
 	alwaysLabel,
 	suggestion,
 	allowAlways,
+	allowRemaining,
+	allowRemainingLabel,
+	remainingEdits,
 	badge,
 	className = 'confirm-card',
 	onChoose,
@@ -39,6 +45,10 @@ export function ConfirmPanel({
 	const resolvedStop = stopLabel ?? t('agent.confirmStop');
 	const resolvedReject = rejectLabel ?? t('comment.reject');
 	const resolvedAlways = alwaysLabel ?? t('agent.confirmAlways');
+	const resolvedAllowRemaining = allowRemainingLabel
+		?? (remainingEdits !== undefined
+			? t('agent.confirmAllowRemaining', remainingEdits)
+			: t('agent.confirmAllowRemaining', 0));
 	const resolvedBadge = badge ?? t('confirm.badge');
 
 	return (
@@ -56,6 +66,11 @@ export function ConfirmPanel({
 				<button className="btn" type="button" onClick={() => onChoose('apply')}>
 					{resolvedApply}
 				</button>
+				{variant === 'agent' && allowRemaining ? (
+					<button className="btn btn--secondary" type="button" onClick={() => onChoose('allow_remaining')}>
+						{resolvedAllowRemaining}
+					</button>
+				) : null}
 				{variant === 'agent' && allowAlways ? (
 					<button className="btn btn--secondary" type="button" onClick={() => onChoose('always')}>
 						{resolvedAlways}

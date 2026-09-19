@@ -4,7 +4,6 @@ import { AGENT_LIMITS } from '../../policy';
 import { asString, type ToolContext, type ToolDefinition, type ToolResult } from '../../types';
 import { denyWriteOverUserEdits } from '../../userEdits';
 import { pathExists, resolveWorkspacePath, throwIfAborted } from '../../workspacePath';
-import { confirmOrSkip } from '../confirm';
 import { enhanceSuccessfulWrite } from '../postEdit';
 
 export const writeFileTool: ToolDefinition = {
@@ -52,23 +51,7 @@ export const writeFileTool: ToolDefinition = {
 			}
 		}
 
-		if (exists) {
-			const denied = await confirmOrSkip(ctx, vscode.l10n.t('agent.confirm.overwriteFile', resolved.relative), content);
-			if (denied) {
-				return {
-					...denied,
-					path: resolved.relative,
-				};
-			}
-		} else {
-			const denied = await confirmOrSkip(ctx, vscode.l10n.t('agent.confirm.createFile', resolved.relative), content);
-			if (denied) {
-				return {
-					...denied,
-					path: resolved.relative,
-				};
-			}
-		}
+		// Confirm только в executeAgentTool (central ask/review) - здесь без второй карточки Always/Apply
 
 		let doc: vscode.TextDocument | undefined;
 		if (exists) {

@@ -101,6 +101,7 @@
 	"chat.hooks.veto": "Hook {0} заблокировал действие: {1}",
 	"agent.confirmAlways": "Всегда",
 	"agent.confirmAlwaysHint": "Всегда разрешать паттерн: {0}",
+	"agent.confirmAllowRemaining": "Разрешить остальные правки ({0})",
 	"settings.chatMode.plan": "Plan - планирование без правок",
 	"settings.chatMode.multitask": "Multitask - координатор (task)",
 	"settings.skillsPaths.label": "Доп. каталоги skills",

@@ -20,6 +20,9 @@ export function ConfirmCard({ confirm }: ConfirmCardProps) {
 			alwaysLabel={confirm.alwaysLabel}
 			suggestion={confirm.suggestion}
 			allowAlways={confirm.allowAlways}
+			allowRemaining={confirm.allowRemaining}
+			allowRemainingLabel={confirm.allowRemainingLabel}
+			remainingEdits={confirm.remainingEdits}
 			onChoose={(choice) => {
 				vscodeApi.postMessage({
 					type: 'confirmChoice',

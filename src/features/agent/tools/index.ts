@@ -13,6 +13,8 @@ import { includeApplyPatchForModel } from '../modelRoutedPatch';
 import { executeSubjectFromArgs, mcpCallSubjectFromArgs } from './mcp/execute';
 import { getToolByName, listTools } from './registry';
 import { confirmAlwaysOrSkip } from './confirm';
+import { shouldOfferAllowRemainingEdits } from './batchEditConfirm';
+import { resolveToolConfirmGating } from './confirmDecision';
 import { formatToolConfirmDetail } from './toolConfirmFormat';
 import { buildEditReviewEntriesFromArgs, editPathsFromToolArgs, formatEditReviewPreview, needsReviewDiffConfirm } from './reviewEditPreview';
 import { pathExists, resolveWorkspacePath } from '../workspacePath';
@@ -29,6 +31,12 @@ export type ExtendedToolContext = ToolContext & TaskToolContext & {
 	onAlwaysAllow?: (pattern: string) => void;
 	// Паттерн для кнопки Always (из suggestPattern); читает confirmAlwaysOrSkip
 	suggestAlwaysPattern?: string;
+	// Флаг turn: после «Allow remaining edits» пропускать confirm на edits/delete
+	allowRemainingEditsThisTurn?: boolean;
+	// Колбэк: пользователь выбрал «Allow remaining» на ConfirmCard
+	onAllowRemainingEditsThisTurn?: () => void;
+	// Сколько mutating edits ещё в очереди этого turn (после текущего)
+	remainingMutatingEdits?: number;
 	todos?: TodoStore;
 	// Mid-run вопрос пользователю (ask_question)
 	askQuestion?(request: {
@@ -171,7 +179,7 @@ function workspaceFoldersFs(): string[] {
 	return (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
 }
 
-export async function executeAgentTool(name: string, rawArguments: string, ctx: ToolContext = {}): Promise<ToolResult> {
+export async function executeAgentTool(name: string, rawArguments: string, ctx: ExtendedToolContext = {}): Promise<ToolResult> {
 	const tool = getToolByName(name);
 	if (!tool) {
 		return {
@@ -294,39 +302,47 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 			};
 		}
 
-		// review edits: не skip даже при autoApprove (нужен явный Accept + diff)
-		const canSkip =
-			decision === 'allow'
-			|| (settings.autoApprove && decision === 'ask');
-		if (canSkip && !sensitiveWrite && !planShellForceAsk && !(nestedStrict && isMutatingTool(name))) {
-			// Не дублировать confirm для allowlist / auto-approve (не .env*, не Plan shell, не мутации субагента)
-			ext.skipConfirm = true;
-		}
-	}
-
-	const reviewEdit = needsReviewDiffConfirm(decision ?? 'allow', action);
-
-	if (planShellForceAsk || reviewEdit) {
-		// Plan shell / review edits: всегда confirm (в т.ч. при autoApprove)
-		ext.forceConfirm = true;
-		ext.skipConfirm = false;
+		const gating = resolveToolConfirmGating({
+			decision,
+			action,
+			autoApprove: settings.autoApprove,
+			sensitiveWrite,
+			planShellForceAsk,
+			nestedStrictMutating: nestedStrict && isMutatingTool(name),
+			allowRemainingEditsThisTurn: ext.allowRemainingEditsThisTurn,
+		});
+		ext.skipConfirm = gating.skipConfirm;
+		ext.forceConfirm = gating.forceConfirm;
 	} else {
 		ext.forceConfirm = false;
 	}
+
+	const reviewEdit = needsReviewDiffConfirm(decision ?? 'allow', action);
 
 	// Центральный ask/review: одна карточка в чате до execute (без второй в tool)
 	if (action && (!ext.skipConfirm || ext.forceConfirm)) {
 		let detail = formatToolConfirmDetail(subject, rawArguments, name);
 		let title = vscode.l10n.t('agent.confirm.toolAsk', name);
+		const remainingEdits = ext.remainingMutatingEdits ?? 0;
+		const offerAllowRemaining = (action === 'edits' || action === 'delete')
+			&& shouldOfferAllowRemainingEdits(remainingEdits);
 		let confirmOpts: {
 			applyLabel?: string;
 			skipLabel?: string;
 			hint?: string;
-		} | undefined;
+			allowRemaining?: boolean;
+			remainingEdits?: number;
+		} | undefined = offerAllowRemaining
+			? {
+				allowRemaining: true,
+				remainingEdits,
+			}
+			: undefined;
 
 		if (reviewEdit) {
 			title = vscode.l10n.t('agent.confirm.reviewEdit', name);
 			confirmOpts = {
+				...confirmOpts,
 				applyLabel: vscode.l10n.t('chat.hunk.accept'),
 				skipLabel: vscode.l10n.t('chat.hunk.reject'),
 				hint: vscode.l10n.t('agent.confirm.reviewHint'),

@@ -4,7 +4,7 @@ import { applySearchReplace } from '../../patch';
 import { AGENT_LIMITS } from '../../policy';
 import { asBoolean, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../../types';
 import { pathExists, resolveWorkspacePath, throwIfAborted } from '../../workspacePath';
-import { confirmAlwaysOrSkip, confirmOrSkip, shouldConfirmWrites } from '../confirm';
+import { confirmAlwaysOrSkip, withForcedConfirm } from '../confirm';
 import { enhanceSuccessfulWrite } from '../postEdit';
 
 export const applyPatchTool: ToolDefinition = {
@@ -79,20 +79,13 @@ export const applyPatchTool: ToolDefinition = {
 			};
 		}
 
+		// Обычный ask/review - только central confirm. Здесь лишь конфликт с правками пользователя.
 		if (userDiffBefore) {
-			const denied = await confirmAlwaysOrSkip(
+			const denied = await withForcedConfirm(ctx, () => confirmAlwaysOrSkip(
 				ctx,
 				vscode.l10n.t('agent.overwriteUserEditsTitle', resolved.relative),
 				`${vscode.l10n.t('agent.overwriteUserEditsDetail')}\n\n${userDiffBefore}`,
-			);
-			if (denied) {
-				return {
-					...denied,
-					path: resolved.relative,
-				};
-			}
-		} else if (shouldConfirmWrites()) {
-			const denied = await confirmOrSkip(ctx, vscode.l10n.t('agent.confirm.applyPatch', resolved.relative, next.count), newString);
+			));
 			if (denied) {
 				return {
 					...denied,

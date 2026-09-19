@@ -82,6 +82,10 @@ export interface PendingConfirm {
 	alwaysLabel?: string;
 	suggestion?: string;
 	allowAlways?: boolean;
+	// Кнопка «Allow remaining edits» при очереди edits в turn
+	allowRemaining?: boolean;
+	allowRemainingLabel?: string;
+	remainingEdits?: number;
 }
 
 // Вопрос агента mid-run (ask_question)

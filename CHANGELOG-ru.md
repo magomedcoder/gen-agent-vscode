@@ -18,6 +18,10 @@
 - **Eval:** gate качества retrieval (precision@k / hit-rate / simpleScore, пороги fail) на offline trigram-корпусе + merge fixtures; smoke permissions/confirm в `src/test/eval/`; запуск `npm test -- --grep eval` или `npm run test:eval` (без remote embeddings)
 - **Mentions:** `@Docs` / `@past` / `@terminals` - ранжирование по релевантности query/arg + per-kind квоты токенов (docs 3k / past 2.5k / terminals 2.5k) с eviction низкого score до turn-level `fitMentionsToBudget`
 - **Slash:** валидация `$ARGUMENTS` / `$n` + frontmatter `arguments:`; autocomplete ставит `/cmd ` для ввода args
+- **Тесты:** матрица permission confirm (ask/deny/always/skip/abort * edits/shell + mcp/web stubs; toolsFallback Continue/Stop; continueLoopOnDeny) через pure helpers `confirmDecision` - без живого LLM
+- **Permissions:** единый pipeline confirm на edits - без дублей Always/Apply после central ask/review (`shouldSkipToolConfirm` / `skipConfirm`); стабильные `awaiting_confirm` + busyDetail; conflict overwrite user edits через forceConfirm; совместимо с batch «Allow remaining»
+- **Permissions:** batch confirm правок - при нескольких edits в одном turn на ConfirmCard есть **Allow remaining edits** / «Разрешить остальные правки» (только этот turn; Always / Reject / review diff без изменений; shell и `.env*` по-прежнему ask)
+- **Shell:** потоковый stdout/stderr для long `run_command` / `run_tests` / `run_scratch` (карточка tool + busyDetail, throttle 120ms); cancel через AbortSignal без гонок status
 
 ## 0.4.0 (11 сентября 2026)
 

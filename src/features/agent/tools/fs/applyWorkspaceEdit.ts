@@ -5,7 +5,7 @@ import { AGENT_LIMITS } from '../../policy';
 import { asBoolean, asObjectArray, asString} from '../../types';
 import type { ToolContext, ToolDefinition, ToolResult } from '../../types';
 import { resolveWorkspacePath, throwIfAborted } from '../../workspacePath';
-import { confirmAlwaysOrSkip, confirmOrSkip, shouldConfirmWrites } from '../confirm';
+import { confirmAlwaysOrSkip, withForcedConfirm } from '../confirm';
 
 export interface SearchReplaceEdit {
 	path: string;
@@ -129,23 +129,15 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 			});
 		}
 
+		// Обычный ask/review - только central confirm. Здесь лишь конфликт с правками пользователя.
 		const drifted = prepared.filter((p) => p.userDiff);
 		if (drifted.length > 0) {
 			const detail = drifted.map((p) => `${p.relative}:\n${p.userDiff}`).join('\n\n');
-			const denied = await confirmAlwaysOrSkip(
+			const denied = await withForcedConfirm(ctx, () => confirmAlwaysOrSkip(
 				ctx,
 				vscode.l10n.t('agent.overwriteUserEditsBatchTitle', drifted.length),
 				`${vscode.l10n.t('agent.overwriteUserEditsDetail')}\n\n${detail}`,
-			);
-			if (denied) {
-				return {
-					...denied,
-					path: prepared.map((p) => p.relative).join(', '),
-				};
-			}
-		} else if (shouldConfirmWrites()) {
-			const summary = prepared.map((p) => vscode.l10n.t('tool.replacementsSummary', p.relative, p.count)).join('\n');
-			const denied = await confirmOrSkip(ctx, vscode.l10n.t('agent.confirm.applyWorkspaceEdit', prepared.length), summary);
+			));
 			if (denied) {
 				return {
 					...denied,

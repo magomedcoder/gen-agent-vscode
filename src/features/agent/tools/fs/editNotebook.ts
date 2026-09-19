@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { applySearchReplace } from '../../patch';
 import { asBoolean, asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../../types';
 import { pathExists, resolveWorkspacePath, throwIfAborted } from '../../workspacePath';
-import { confirmAlwaysOrSkip } from '../confirm';
 
 function cellLanguageMeta(cellLanguage: string): { kind: vscode.NotebookCellKind; languageId: string } {
 	const lang = cellLanguage.trim().toLowerCase() || 'python';
@@ -298,17 +297,7 @@ export const editNotebookTool: ToolDefinition = {
 			};
 		}
 
-		const denied = await confirmAlwaysOrSkip(
-			ctx,
-			`Править notebook: ${resolved.relative} (ячейка ${cellIdx}${isNewCell ? ', новая' : ''})`,
-			isNewCell ? newString : `old -> new\n---\n${oldString}\n---\n${newString}`,
-		);
-		if (denied) {
-			return {
-				...denied,
-				path: resolved.relative,
-			};
-		}
+		// Confirm только в executeAgentTool - без второй карточки Always/Apply
 
 		throwIfAborted(ctx.signal);
 

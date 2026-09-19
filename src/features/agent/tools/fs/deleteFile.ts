@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { asString, type ToolContext, type ToolDefinition, type ToolResult } from '../../types';
 import { pathExists, resolveWorkspacePath, throwIfAborted } from '../../workspacePath';
-import { confirmOrSkip, shouldConfirmDeletes } from '../confirm';
 
 export const deleteFileTool: ToolDefinition = {
 	name: 'delete_file',
@@ -35,15 +34,7 @@ export const deleteFileTool: ToolDefinition = {
 			};
 		}
 
-		if (shouldConfirmDeletes()) {
-			const denied = await confirmOrSkip(ctx, vscode.l10n.t('agent.confirm.deleteFile', resolved.relative));
-			if (denied) {
-				return {
-					...denied,
-					path: resolved.relative
-				};
-			}
-		}
+		// Confirm только в executeAgentTool - без второй карточки
 
 		const doc = await vscode.workspace.openTextDocument(resolved.uri);
 		await ctx.checkpoint?.remember(resolved.uri, resolved.relative, doc.getText());

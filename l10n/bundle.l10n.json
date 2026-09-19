@@ -101,6 +101,7 @@
 	"chat.hooks.veto": "Hook {0} blocked the action: {1}",
 	"agent.confirmAlways": "Always",
 	"agent.confirmAlwaysHint": "Always allow pattern: {0}",
+	"agent.confirmAllowRemaining": "Allow remaining edits ({0})",
 	"settings.chatMode.plan": "Plan - read-only planning",
 	"settings.chatMode.multitask": "Multitask - coordinator (task)",
 	"settings.skillsPaths.label": "Extra skills directories",

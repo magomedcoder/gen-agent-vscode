@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../../types';
 import { resolveCommandCwd, throwIfAborted } from '../../workspacePath';
-import { runShellCommand } from '../../shellExec';
+import { runShellCommand, formatPartialShellPreview } from '../../shellExec';
 import { formatCommandLine } from '../../commandPolicy';
 import { confirmAlwaysOrSkip } from '../confirm';
 import type { ShellSession } from '../../shellSession';
@@ -126,6 +126,17 @@ export const runCommandTool: ToolDefinition = {
 			timeoutMs,
 			signal: ctx.signal,
 			env: envExtra,
+			onPartialOutput: ctx.onPartialOutput
+				? (raw) => {
+					ctx.onPartialOutput!(
+						formatPartialShellPreview({
+							commandLine,
+							cwd,
+							raw,
+						}),
+					);
+				}
+				: undefined,
 		});
 		if (shell && result.ok) {
 			shell.applyCd(command, cmdArgs);

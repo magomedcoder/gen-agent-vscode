@@ -29,9 +29,11 @@ import { isMutatingTool } from './auth';
 import { resolveSubagent } from './subagents';
 import { withAgentRoot } from './agentRoot';
 import { defaultWorkspaceCwd, ShellSession } from './shellSession';
-import { sanitizeToolArgumentsForApi, type ToolContext, type ToolResult } from './types';
+import { sanitizeToolArgumentsForApi, type ConfirmChoice, type ToolContext, type ToolResult } from './types';
 import type { AgentWriteTracker } from './userEdits';
 import { confirmOrSkip } from './tools/confirm';
+import { countRemainingMutatingEdits } from './tools/batchEditConfirm';
+import { shouldContinueToolsFallback, shouldStopLoopOnToolDeny } from './tools/confirmDecision';
 import { buildUserContentWithImages, type ImageAttachment } from '../chat/attachments';
 import { completeWithContextGuard, softCompactApiMessages, shrinkApiMessages, dropSupersededReminders, type ShrinkStats } from '../chat/fitContext';
 import { estimateChatMessagesTokens } from '../../core/llm/estimateTokens';
@@ -416,6 +418,9 @@ export class AgentSession {
 			shell,
 			sessionAllow: params.sessionAllow,
 			onAlwaysAllow: params.onAlwaysAllow,
+			onAllowRemainingEditsThisTurn: () => {
+				toolCtxBase.allowRemainingEditsThisTurn = true;
+			},
 			subagentDepth: depth,
 			setChatMode: async (mode) => {
 				await params.setChatMode?.(mode);
@@ -608,7 +613,7 @@ export class AgentSession {
 			if (result.toolsFallback && toolsEnabled) {
 				if (params.confirm) {
 					params.onBusyDetail?.(vscode.l10n.t('chat.busy.awaitingToolsFallback'));
-					let choice: 'apply' | 'skip' | 'abort' | 'always' = 'apply';
+					let choice: ConfirmChoice = 'apply';
 					try {
 						choice = await params.confirm({
 							title: vscode.l10n.t('agent.toolsUnsupportedConfirm'),
@@ -621,7 +626,7 @@ export class AgentSession {
 					} finally {
 						params.onBusyDetail?.(undefined);
 					}
-					if (choice !== 'apply' && choice !== 'always') {
+					if (!shouldContinueToolsFallback(choice)) {
 						params.ui.append({
 							id: messageId(),
 							role: 'error',
@@ -813,6 +818,7 @@ export class AgentSession {
 				try {
 					const confirmForTool: ToolContext['confirm'] = params.confirm
 						? async (req) => {
+							// Стабильный awaiting_confirm + busyDetail до ответа пользователя (не сбрасываем mid-turn - иначе мигание между central и tool confirm)
 							liveCalls[i] = {
 								...liveCalls[i]!,
 								status: 'awaiting_confirm',
@@ -826,7 +832,7 @@ export class AgentSession {
 							try {
 								return await params.confirm!(req);
 							} finally {
-								params.onBusyDetail?.(undefined);
+								// После Apply: оставляем busyDetail и переводим в pending без «дыры»
 								if (liveCalls[i]?.status === 'awaiting_confirm') {
 									liveCalls[i] = {
 										...liveCalls[i]!,
@@ -841,15 +847,52 @@ export class AgentSession {
 						}
 						: undefined;
 
+					// Потоковый stdout shell -> tool card + busyDetail (throttle, сброс после tool)
+					let lastPartialAt = 0;
+					const onPartialOutput = SHELL_UI_TOOLS.has(call.function.name)
+						? (text: string) => {
+							if (params.signal.aborted || toolAbort.signal.aborted) {
+								return;
+							}
+
+							const now = Date.now();
+							if (now - lastPartialAt < 120) {
+								return;
+							}
+
+							lastPartialAt = now;
+							liveCalls[i] = {
+								...liveCalls[i]!,
+								status: 'pending',
+								result: text,
+							};
+							params.ui.update(assistantId, {
+								toolCalls: liveCalls.map((c) => ({ ...c })),
+							});
+
+							const tail = text.trim().split(/\r?\n/).slice(-2).toString().slice(0, 120);
+							params.onBusyDetail?.(
+								tail ? `${call.function.name}: ${tail}` : call.function.name,
+							);
+						}
+						: undefined;
+
 					const toolResult = await executeAgentTool(
 						call.function.name,
 						call.function.arguments,
 						{
 							...toolCtxBase,
+							remainingMutatingEdits: countRemainingMutatingEdits(
+								orderedCalls.map((c) => c.function.name),
+								i,
+							),
 							confirm: confirmForTool ?? toolCtxBase.confirm,
 							signal: toolAbort.signal,
+							onPartialOutput,
 						},
 					);
+					// Сброс busy после tool (confirm + streaming) - один раз, без mid-turn мигания
+					params.onBusyDetail?.(undefined);
 					const lengthHint = !toolResult.ok && result.finishReason === 'length'
 						? vscode.l10n.t('agent.responseTruncated')
 						: '';
@@ -906,6 +949,7 @@ export class AgentSession {
 						attachments: toolAttachments,
 					};
 				} catch (err) {
+					params.onBusyDetail?.(undefined);
 					// Отмена только этого tool - продолжаем цикл агента
 					if (isAbortError(err) && !params.signal.aborted) {
 						const resultText = truncate(vscode.l10n.t('agent.operationCancelled'));
@@ -943,6 +987,8 @@ export class AgentSession {
 					pendingToolImages.push(...atts);
 				}
 			};
+			// Batch «Allow remaining edits» действует только в пределах этого assistant turn
+			toolCtxBase.allowRemainingEditsThisTurn = false;
 			let i = 0;
 			while (i < orderedCalls.length) {
 				if (params.signal.aborted) {
@@ -954,7 +1000,7 @@ export class AgentSession {
 					const msg = await runOne(i);
 					collectToolImages(msg.attachments);
 					// cancelled (per-tool kill) - всегда продолжаем цикл
-					if (msg.denied && !msg.cancelled && !settings.continueLoopOnDeny) {
+					if (shouldStopLoopOnToolDeny(Boolean(msg.denied), msg.cancelled, settings.continueLoopOnDeny)) {
 						apiMessages.push({
 							role: 'tool',
 							tool_call_id: msg.tool_call_id,
@@ -988,7 +1034,7 @@ export class AgentSession {
 						name: msg.name,
 						content: msg.content
 					});
-					if (msg.denied && !msg.cancelled && !settings.continueLoopOnDeny) {
+					if (shouldStopLoopOnToolDeny(Boolean(msg.denied), msg.cancelled, settings.continueLoopOnDeny)) {
 						apiMessages.push(...toolApiMessages);
 						return;
 					}

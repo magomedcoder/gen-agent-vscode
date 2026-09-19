@@ -17,8 +17,8 @@ export function isMutatingTool(name: string): boolean {
 }
 
 /**
- * Confirm на запись/удаление всегда через confirmOrSkip:
- * skip - `skipConfirm` / `autoApprove` / approvalPolicy allow в executeAgentTool.
+ * Confirm на запись/удаление всегда через central executeAgentTool + confirmOrSkip:
+ * skip - `skipConfirm` / `autoApprove` / approvalPolicy allow; edit-tools сами карточку не показывают.
  */
 export function shouldConfirmWrites(): boolean {
 	return true;

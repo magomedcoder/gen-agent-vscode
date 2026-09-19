@@ -4,6 +4,7 @@ import { shouldConfirmDeletes, shouldConfirmWrites } from '../auth';
 import { previewText } from '../policy';
 import { throwIfAborted } from '../workspacePath';
 import type { ConfirmChoice, ToolContext, ToolResult } from '../types';
+import { isAllowRemainingConfirmChoice, isAlwaysConfirmChoice, resolveConfirmChoiceOutcome } from './confirmDecision';
 
 export function abortTurn(): never {
 	const err = new Error(vscode.l10n.t('agent.operationCancelled'));
@@ -14,11 +15,45 @@ export function abortTurn(): never {
 export type ConfirmOrSkipOpts = {
 	suggestion?: string;
 	allowAlways?: boolean;
+	// Предложить «Allow remaining edits» (очередь в этом turn)
+	allowRemaining?: boolean;
+	remainingEdits?: number;
 	applyLabel?: string;
 	skipLabel?: string;
 	rejectLabel?: string;
 	hint?: string;
 };
+
+// Единое правило: после central confirm skipConfirm=true - вторая карточка Always/Apply не нужна
+export function shouldSkipToolConfirm(opts: {
+	skipConfirm?: boolean;
+	forceConfirm?: boolean;
+	autoApprove: boolean;
+}): boolean {
+	// forceConfirm (Plan shell / review / overwrite user edits) перекрывает skip и autoApprove
+	return !opts.forceConfirm && (Boolean(opts.skipConfirm) || opts.autoApprove);
+}
+
+// Временный forceConfirm для особых ask (конфликт с правками пользователя после central Apply)
+export async function withForcedConfirm<T>(
+	ctx: ToolContext,
+	run: () => Promise<T>,
+): Promise<T> {
+	const ext = ctx as ToolContext & {
+		skipConfirm?: boolean;
+		forceConfirm?: boolean;
+	};
+	const prevForce = ext.forceConfirm;
+	const prevSkip = ext.skipConfirm;
+	ext.forceConfirm = true;
+	ext.skipConfirm = false;
+	try {
+		return await run();
+	} finally {
+		ext.forceConfirm = prevForce;
+		ext.skipConfirm = prevSkip;
+	}
+}
 
 export async function confirmOrSkip(
 	ctx: ToolContext,
@@ -31,8 +66,11 @@ export async function confirmOrSkip(
 		skipConfirm?: boolean
 		forceConfirm?: boolean
 	};
-	// forceConfirm (Plan shell ask / review diff) перекрывает autoApprove / skipConfirm
-	if (!ext.forceConfirm && (ext.skipConfirm || getSettings().autoApprove)) {
+	if (shouldSkipToolConfirm({
+		skipConfirm: ext.skipConfirm,
+		forceConfirm: ext.forceConfirm,
+		autoApprove: getSettings().autoApprove,
+	})) {
 		return undefined;
 	}
 
@@ -62,6 +100,8 @@ export async function confirmOrSkip(
 			hint: opts?.hint,
 			suggestion: opts?.suggestion,
 			allowAlways: opts?.allowAlways,
+			allowRemaining: opts?.allowRemaining,
+			remainingEdits: opts?.remainingEdits,
 			applyLabel: opts?.applyLabel,
 			skipLabel: opts?.skipLabel,
 			rejectLabel: opts?.rejectLabel,
@@ -74,16 +114,24 @@ export async function confirmOrSkip(
 		});
 	});
 
-	if (choice === 'apply' || choice === 'always') {
-		const onAlways = (ctx as ToolContext & { onAlwaysAllow?: (pattern: string) => void }).onAlwaysAllow;
-		if (choice === 'always' && opts?.suggestion && onAlways) {
-			onAlways(opts.suggestion);
+	// apply|always|allow_remaining -> proceed; skip -> denied; abort -> AbortError
+	const outcome = resolveConfirmChoiceOutcome(choice);
+	if (outcome === 'proceed') {
+		const hooks = ctx as ToolContext & {
+			onAlwaysAllow?: (pattern: string) => void
+			onAllowRemainingEditsThisTurn?: () => void
+		};
+		if (isAlwaysConfirmChoice(choice) && opts?.suggestion && hooks.onAlwaysAllow) {
+			hooks.onAlwaysAllow(opts.suggestion);
+		}
+		if (isAllowRemainingConfirmChoice(choice)) {
+			hooks.onAllowRemainingEditsThisTurn?.();
 		}
 
 		return undefined;
 	}
 
-	if (choice === 'skip') {
+	if (outcome === 'denied') {
 		return {
 			ok: false,
 			denied: true,
@@ -100,13 +148,21 @@ export async function confirmAlwaysOrSkip(
 	detail?: string,
 	opts?: Omit<ConfirmOrSkipOpts, 'allowAlways'>,
 ): Promise<ToolResult | undefined> {
-	const forceConfirm = (ctx as ToolContext & { forceConfirm?: boolean }).forceConfirm;
-	if (!forceConfirm && getSettings().autoApprove) {
+	const ext = ctx as ToolContext & {
+		skipConfirm?: boolean;
+		forceConfirm?: boolean;
+		suggestAlwaysPattern?: string;
+	};
+	// Тот же gate, что confirmOrSkip - иначе Always/Apply дублируются после central ask
+	if (shouldSkipToolConfirm({
+		skipConfirm: ext.skipConfirm,
+		forceConfirm: ext.forceConfirm,
+		autoApprove: getSettings().autoApprove,
+	})) {
 		return undefined;
 	}
 
-	const suggestion = opts?.suggestion
-		?? (ctx as ToolContext & { suggestAlwaysPattern?: string }).suggestAlwaysPattern;
+	const suggestion = opts?.suggestion ?? ext.suggestAlwaysPattern;
 	return confirmOrSkip(ctx, title, detail, {
 		...opts,
 		allowAlways: true,

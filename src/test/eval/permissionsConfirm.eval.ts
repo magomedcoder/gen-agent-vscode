@@ -5,8 +5,8 @@ import { evaluateApproval, isRiskySubject, suggestPattern, toolActionType } from
 import type { ApprovalPolicy } from '../../features/agent/permissionPolicy.js';
 
 /**
- * Лёгкий smoke permissions/confirm рядом с retrieval eval (не полный matrix ask/deny/always).
- * Pure: evaluateApproval / suggestPattern / toolActionType - без UI confirm host.
+ * Лёгкий smoke permissions/confirm рядом с retrieval eval.
+ * Полная матрица ask/deny/always/skip/abort * edits/shell + toolsFallback - `permissionConfirmMatrix.test.ts` (pure helpers, без UI confirm host).
  */
 suite('eval/permissions-confirm', () => {
 	test('smoke: default policy - edits/shell ask, skill allow, read без action', () => {
@@ -101,8 +101,20 @@ suite('eval/permissions-confirm', () => {
 				denylist: []
 			},
 		};
-		assert.strictEqual(evaluateApproval('edits', 'src/index.ts', reviewEdits), 'allow');
-		assert.strictEqual(evaluateApproval('edits', '.env.local', reviewEdits), 'ask');
+		// edits+review: явный decision `review` (diff preview), не heuristic allow/ask
+		assert.strictEqual(evaluateApproval('edits', 'src/index.ts', reviewEdits), 'review');
+		assert.strictEqual(evaluateApproval('edits', '.env.local', reviewEdits), 'review');
+
+		const reviewShell: ApprovalPolicy = {
+			...DEFAULT_APPROVAL_POLICY,
+			shell: {
+				mode: 'review',
+				allowlist: [],
+				denylist: []
+			},
+		};
+		assert.strictEqual(evaluateApproval('shell', 'echo hi', reviewShell), 'allow');
+		assert.strictEqual(evaluateApproval('shell', 'rm -rf /', reviewShell), 'ask');
 	});
 
 	test('smoke: suggestPattern для Always + mergeAlwaysAllow', () => {
