@@ -17,6 +17,9 @@ export interface StoredChatSession {
 	messages: ChatUiMessage[];
 	createdAt: number;
 	updatedAt: number;
+	// Parent<->child: вкладка субагента / handoff
+	parentSessionId?: string;
+	childSessionIds?: string[];
 }
 
 export interface SessionSummary {
@@ -27,6 +30,12 @@ export interface SessionSummary {
 	messageCount: number;
 	// Сейчас идёт agent/ask turn в этой вкладке (UI-индикатор)
 	busy?: boolean;
+	// Parent session (если эта вкладка - child субагента)
+	parentSessionId?: string;
+	// Child sessions, порождённые из этой вкладки
+	childSessionIds?: string[];
+	// Явный флаг child-сессии (дублирует parentSessionId для UI)
+	isChild?: boolean;
 }
 
 function newId(): string {
@@ -79,6 +88,11 @@ function toSummary(session: StoredChatSession): SessionSummary {
 		createdAt: session.createdAt,
 		updatedAt: session.updatedAt,
 		messageCount: session.messages.length,
+		parentSessionId: session.parentSessionId,
+		childSessionIds: session.childSessionIds?.length
+			? [...session.childSessionIds]
+			: undefined,
+		isChild: Boolean(session.parentSessionId),
 	};
 }
 
@@ -329,19 +343,49 @@ export class SessionStore {
 		void this.persistAll();
 	}
 
-	createSession(title?: string): StoredChatSession {
+	createSession(title?: string, opts?: { parentSessionId?: string }): StoredChatSession {
 		const now = Date.now();
+		const parentSessionId = opts?.parentSessionId?.trim() || undefined;
 		const session: StoredChatSession = {
 			id: newId(),
 			title: (title?.trim() || defaultTitle()).slice(0, 120),
 			messages: [],
 			createdAt: now,
 			updatedAt: now,
+			parentSessionId,
 		};
 		this.sessions.unshift(session);
+		if (parentSessionId) {
+			this.linkChildSession(parentSessionId, session.id);
+		}
 		this.currentId = session.id;
 		void this.persistAll();
 		return session;
+	}
+
+	// Связать parent <-> child без смены currentId
+	linkChildSession(parentId: string, childId: string): void {
+		const pIdx = this.sessions.findIndex((s) => s.id === parentId);
+		const cIdx = this.sessions.findIndex((s) => s.id === childId);
+		if (pIdx < 0 || cIdx < 0) {
+			return;
+		}
+
+		const parent = this.sessions[pIdx]!;
+		const child = this.sessions[cIdx]!;
+		const kids = new Set(parent.childSessionIds ?? []);
+		kids.add(childId);
+		this.sessions[pIdx] = {
+			...parent,
+			childSessionIds: [...kids],
+			updatedAt: Date.now(),
+		};
+		this.sessions[cIdx] = {
+			...child,
+			parentSessionId: parentId,
+			updatedAt: Date.now(),
+		};
+		void this.persistAll();
 	}
 
 	switchSession(id: string): StoredChatSession | undefined {

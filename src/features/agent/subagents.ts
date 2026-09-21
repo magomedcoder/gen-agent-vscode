@@ -47,6 +47,7 @@ export const BUILTIN_SUBAGENTS: SubagentDef[] = [
 			'Ты субагент Scout. Фокус - внешняя документация и веб.',
 			'План multi-hop: web_search -> fetch_page / search_docs -> сверка с локальным кодом через find_code / project_map / find_symbol при необходимости.',
 			'Не правь файлы и не запускай мутирующие команды.',
+			'При use_worktree: работай только в выданном cwd; после успеха parent обычно удаляет worktree (cleanup_worktree).',
 			'Верни сжатый отчёт: URL, ключевые цитаты, выводы; без воды.',
 		].join(' '),
 	},

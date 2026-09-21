@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode, type SubmitEvent } from 'react';
-import type { AdminPolicyInfo, IndexEngineStatus, McpServerStatus, PersonaOption } from '../../features/chat/protocol';
+import type { AdminPolicyInfo, IndexEngineStatus, McpServerStatus, PersonaOption, ResearchJobUi } from '../../features/chat/protocol';
 import type { GenSettings } from '../../core/config/types';
 import { DEFAULT_SETTINGS } from '../../core/config/types';
 import type { LlmModelOption } from '../../core/llm/types';
@@ -82,6 +82,8 @@ interface SettingsScreenProps {
 	onOpenProjectPath?: (path: string) => void;
 	// Known server n_ctx for maxContextTokens warn
 	cachedNCtx?: number;
+	// Live research jobs (Teams) - из chat state, если Settings в том же webview
+	researchJobs?: ResearchJobUi[];
 }
 
 function renderNavItems(
@@ -147,6 +149,7 @@ export function SettingsScreen({
 	onLoadPersonas,
 	onOpenProjectPath,
 	cachedNCtx,
+	researchJobs,
 }: SettingsScreenProps) {
 	const [page, setPage] = useState<SettingsPageId>('connection');
 	const [draft, setDraft] = useState<GenSettings>(settings);
@@ -364,6 +367,7 @@ export function SettingsScreen({
 									agentsStatus={agentsStatus}
 									onLoadAgents={onLoadAgents}
 									onCloneAgentPreset={onCloneAgentPreset}
+									researchJobs={researchJobs}
 								/>
 								<HooksPage
 									hooks={hooks}

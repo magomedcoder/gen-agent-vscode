@@ -290,11 +290,24 @@ export class AgentSession {
 		}) => Promise<{ sessionId: string; title: string }>;
 		onSubagentJob?: (event: {
 			id: string;
-			status: 'running' | 'done' | 'error' | 'aborted';
+			status: 'queued' | 'running' | 'done' | 'error' | 'aborted';
 			subagent: string;
 			promptPreview: string;
+			prompt?: string;
 			detail?: string;
+			worktreePath?: string;
+			background?: boolean;
+			mutating?: boolean;
+			reportSnippet?: string;
+			childSessionId?: string;
 		}) => void;
+		createJobAbort?: (jobId: string) => AbortSignal;
+		releaseJobAbort?: (jobId: string) => void;
+		openChildSessionForJob?: (params: {
+			jobId: string;
+			title: string;
+			prompt: string;
+		}) => Promise<{ sessionId: string } | undefined>;
 	}): Promise<void> {
 		const settings = getSettings();
 		const modeModel = resolveModeModel(settings) || settings.model;
@@ -438,6 +451,9 @@ export class AgentSession {
 			},
 			createNewTask: params.createNewTask,
 			onSubagentJob: params.onSubagentJob,
+			createJobAbort: params.createJobAbort,
+			releaseJobAbort: params.releaseJobAbort,
+			openChildSessionForJob: params.openChildSessionForJob,
 			runSubagent: async ({ type, prompt, signal, cwd }) => {
 				const def = await resolveSubagent(type);
 				const child = new AgentSession(this.client);

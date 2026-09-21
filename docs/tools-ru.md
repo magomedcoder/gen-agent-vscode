@@ -96,7 +96,16 @@ Builtin tools регистрируются через **registry** и лежат
 - После хода агента можно **Восстановить снимок**.
 - Секреты в результатах tools маскируются по regexp из настроек (если заданы).
 - Опционально `primaryTools` (имена tools, по одному на строку): если непусто - primary-агенту отдаются только они (`list_mcp_tools` всегда доступен; пустой фильтр * откат ко всем). Субагенты список не применяют. Для code-mode явно добавьте `execute` в allowlist.
-- Субагент `task`: опциональный git worktree через `worktreesEnabled` или аргумент `use_worktree`. Ветка в `.gen/worktrees/<slug>/` (fallback: sibling `*.gen-worktrees/`). Опционально `worktreeStartCommand` после create. Worktree не удаляется автоматически. Не git - пропуск, обычный субагент.
+- Субагент `task` (`explore` / `general` / `scout` / presets / `.gen/agents/`):
+  - `prompt` - один job; или `prompts[]` - fan-out (по умолчанию read-only research).
+  - `max_parallel` - параллелизм для `prompts[]` (default 3, max 6).
+  - `background` / `run_in_background` - сразу вернуть job ids; parent не блокируется.
+  - `allow_mutating_parallel` - нужен для `prompts[]` у non-readonly (например `general`); каждый job в своём worktree.
+  - `synthesize` - записать aggregate markdown в `.gen/reports/` (в Project по умолчанию **true**).
+  - `open_child_session` - child-вкладка чата (parent<->child Teams UI).
+  - `resume_job_id` - перезапуск aborted/error job (тот же id-префикс).
+  - `cleanup_worktree` - после успешного **readonly** job удалить созданный worktree (по умолчанию **true** для explore/scout; mutating worktree не трогает). В Teams UI также есть bulk cleanup.
+  - Опциональный git worktree через `worktreesEnabled` или аргумент `use_worktree`. Ветка в `.gen/worktrees/<slug>/` (fallback: sibling `*.gen-worktrees/`). Опционально `worktreeStartCommand` после create. Не git - пропуск, обычный субагент.
 - Experimental **code-mode** (`codeModeEnabled`, по умолчанию выкл.): tool `execute` выполняет JSON-массив шагов `[{ "tool": "server__toolName", "arguments": { ... } }, ...]` (или тот же массив строкой `script`). Только объявленные MCP tools по имени - **без** host `eval` / Node / `require` / `fs`. Каждый шаг идёт через тот же путь подтверждения, что `call_mcp_tool`. Макс. 32 шага за вызов.
 - В строках MCP `mcpServers` (`command`, `args`, значения `env`, `cwd`) подставляются `${env:NAME}` / `{env:NAME}` и `{file:path}` (относительно корня workspace).
 

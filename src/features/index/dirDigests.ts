@@ -121,7 +121,7 @@ export type DirRewalkChild = {
  * Пропустить перечитывание/rechunk прямых детей `dir`, если:
  * - есть dirDigest;
  * - набор путей совпадает;
- * - у каждого файла совпадает content-hash (явно или через size+mtime ↔ record).
+ * - у каждого файла совпадает content-hash (явно или через size+mtime <-> record).
  * Path+size без hash/mtime - недостаточно (контент мог смениться при том же размере).
  */
 export function canSkipDirRewalk(

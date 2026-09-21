@@ -60,6 +60,12 @@ export function ChatHeader({
 	const currentId = sessionId ?? list[0]?.id ?? '';
 	const current = list.find((s) => s.id === currentId);
 	const currentBusy = Boolean(current?.busy);
+	const parentSessionId = current?.parentSessionId;
+	const isChild = Boolean(current?.isChild || parentSessionId);
+	const parentSession = parentSessionId
+		? list.find((s) => s.id === parentSessionId)
+		: undefined;
+	const childCount = current?.childSessionIds?.length ?? 0;
 	const modelList = models ?? [];
 	const currentModel = model ?? '';
 	const [renaming, setRenaming] = useState(false);
@@ -194,17 +200,44 @@ export function ChatHeader({
 								onChange={(e) => onSwitch(e.target.value)}
 								title={t('chat.session.switch')}
 							>
-								{list.map((s) => (
-									<option
-										key={s.id}
-										value={s.id}
-										className={s.busy ? 'session-bar__option--busy' : undefined}
-									>
-										{s.busy ? ` ${s.title}` : s.title}
-									</option>
-								))}
+								{list.map((s) => {
+									const childMark = s.isChild || s.parentSessionId ? '↳ ' : '';
+									return (
+										<option
+											key={s.id}
+											value={s.id}
+											className={s.busy ? 'session-bar__option--busy' : undefined}
+										>
+											{s.busy ? ` ${childMark}${s.title}` : `${childMark}${s.title}`}
+										</option>
+									);
+								})}
 							</select>
 						)}
+						{isChild ? (
+							<span className="session-bar__badge session-bar__badge--child" title={t('chat.session.child')}>
+								{t('chat.session.child')}
+							</span>
+						) : null}
+						{parentSessionId ? (
+							<button
+								className="btn btn--secondary session-bar__badge session-bar__badge--parent"
+								type="button"
+								title={t('chat.session.parent', parentSession?.title ?? parentSessionId)}
+								aria-label={t('chat.session.parent', parentSession?.title ?? parentSessionId)}
+								onClick={() => onSwitch(parentSessionId)}
+							>
+								{t('chat.session.parentShort')}
+							</button>
+						) : null}
+						{childCount > 0 ? (
+							<span
+								className="session-bar__badge session-bar__badge--children"
+								title={t('chat.session.children', childCount)}
+							>
+								{t('chat.session.childrenShort', childCount)}
+							</span>
+						) : null}
 						<button
 							className="btn btn--secondary session-bar__btn"
 							type="button"

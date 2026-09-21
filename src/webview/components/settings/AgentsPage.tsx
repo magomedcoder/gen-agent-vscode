@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import type { AgentCustomInfo, AgentPresetInfo } from '../../../features/chat/protocol';
+import type { AgentCustomInfo, AgentPresetInfo, ResearchJobUi } from '../../../features/chat/protocol';
 import { t } from '../../i18n';
+import { ResearchJobsPanel } from '../ResearchJobsPanel';
 import { SettingsSection } from './SettingsSection';
 
 export interface AgentsPageData {
@@ -14,6 +15,8 @@ interface AgentsPageProps {
 	agentsStatus?: string;
 	onLoadAgents?: () => void;
 	onCloneAgentPreset?: (id: string) => void;
+	// Live research jobs из chat state (если доступны)
+	researchJobs?: ResearchJobUi[];
 }
 
 export function AgentsPage({
@@ -21,15 +24,25 @@ export function AgentsPage({
 	agentsStatus,
 	onLoadAgents,
 	onCloneAgentPreset,
+	researchJobs,
 }: AgentsPageProps) {
 	useEffect(() => {
 		onLoadAgents?.();
 	}, [onLoadAgents]);
 
 	const statusIsError = Boolean(agentsStatus && agentsStatus !== t('settings.agents.cloning') && !agentsStatus.startsWith(t('settings.agents.cloned', '').trimEnd()) && !agentsStatus.startsWith(t('settings.agents.updated', '').trimEnd()));
+	const jobs = researchJobs ?? [];
 
 	return (
 		<>
+			<SettingsSection titleKey="chat.research.teamsLive" hintKey="chat.research.empty">
+				{jobs.length > 0 ? (
+					<ResearchJobsPanel jobs={jobs} titleKey="chat.research.teamsLive" />
+				) : (
+					<span className="field__hint">{t('chat.research.empty')}</span>
+				)}
+			</SettingsSection>
+
 			<SettingsSection titleKey="settings.section.agents.presets" hintKey="settings.agents.pageHint">
 			<span className="field__hint">{t('settings.agents.runtimeNote')}</span>
 

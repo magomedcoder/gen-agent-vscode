@@ -4,6 +4,7 @@ import { ChatHeader } from './components/ChatHeader';
 import { Composer } from './components/Composer';
 import { MessageList } from './components/MessageList';
 import { ProjectSetupBanner } from './components/ProjectSetupBanner';
+import { ResearchJobsPanel } from './components/ResearchJobsPanel';
 import { SettingsScreen } from './components/SettingsScreen';
 import { TodoPanel } from './components/TodoPanel';
 import { t } from './i18n';
@@ -171,6 +172,7 @@ export function App() {
 				onLoadPersonas={loadPersonas}
 				onOpenProjectPath={openProjectPath}
 				cachedNCtx={chat.cachedNCtx}
+				researchJobs={chat.researchJobs}
 			/>
 		);
 	}
@@ -179,6 +181,7 @@ export function App() {
 	const paused = chat.agentPaused;
 	const textSize = chat.chatTextSize ?? 'default';
 	const appClass = textSize === 'default' ? 'app' : `app app--text-${textSize}`;
+	const researchJobs = chat.researchJobs ?? [];
 
 	return (
 		<div className={appClass}>
@@ -303,6 +306,9 @@ export function App() {
 				</div>
 			) : null}
 			<div className="composer-dock">
+				{researchJobs.length > 0 ? (
+					<ResearchJobsPanel jobs={researchJobs} compact />
+				) : null}
 				<Composer
 					key={chat.sessionId ?? 'none'}
 					busy={chat.busy || confirming}

@@ -25,11 +25,12 @@ import { injectImagePathMarkers, saveImageAttachments } from './attachments';
 import type { ImageAttachment, IncomingImage } from './attachments';
 import { getEditorChatContext } from './editorContext';
 import { focusChatView } from './focusChat';
-import type { AgentPausedState, ChatTodoItem, ChatUiMessage, ChatViewState, PendingConfirm, SessionDiffEvent, ToWebviewMessage } from './protocol';
+import type { AgentPausedState, ChatTodoItem, ChatUiMessage, ChatViewState, PendingConfirm, ResearchJobUi, SessionDiffEvent, ToWebviewMessage } from './protocol';
 import { recordActivity } from '../../core/stores/activityStore';
 import { SessionStore, fallbackTitleFromMessages, isDefaultSessionTitle, setSessionPeek } from './sessionStore';
 import { abortSessionRuntime, createSessionRuntime } from './sessionRuntime';
 import type { PendingConfirmInternal, PendingQuestionInternal, SessionRuntime } from './sessionRuntime';
+import { researchJobsBusySummary, upsertResearchJob } from '../agent/researchJobs';
 import { generateSessionTitle } from '../agent/systemAgents';
 import { loadProjectRulesAppendix } from '../project/projectRules';
 import { parseSlashMode, type SlashCommand } from './slashCommands';
@@ -200,6 +201,19 @@ export class ChatSession {
 	
 	private set todos(value: ChatTodoItem[]) { 
 		this.runtime.todos = value;
+	}
+
+	// Research jobs из runtime (state machine заполняет отдельно)
+	private get researchJobs(): ResearchJobUi[] {
+		return this.runtime.researchJobs ?? [];
+	}
+
+	private set researchJobs(value: ResearchJobUi[]) {
+		this.runtime.researchJobs = value;
+	}
+
+	private get researchAborts() {
+		return this.runtime.researchAborts;
 	}
 	
 	private get agentPaused(): AgentPausedState | undefined { 
@@ -378,6 +392,9 @@ export class ChatSession {
 				}
 				: undefined,
 			todos: this.todos.length > 0 ? this.todos.map((item) => ({ ...item })) : undefined,
+			researchJobs: this.researchJobs.length > 0
+				? this.researchJobs.map((job) => ({ ...job }))
+				: undefined,
 			agentPaused: this.agentPaused,
 			activeToolCallId: this.activeToolCallId,
 			chatTextSize: settings.chatTextSize,
@@ -460,6 +477,13 @@ export class ChatSession {
 	private ensureRuntime(sessionId: string): SessionRuntime {
 		let rt = this.runtimes.get(sessionId);
 		if (rt) {
+			if (!rt.researchAborts) {
+				rt.researchAborts = new Map();
+			}
+
+			if (!rt.researchJobs) {
+				rt.researchJobs = [];
+			}
 			return rt;
 		}
 
@@ -872,6 +896,7 @@ export class ChatSession {
 		this.turnQueue.length = 0;
 		this.inflight?.abort();
 		this.clearToolAborts();
+		this.interruptAllResearch();
 		this.agentPaused = undefined;
 		this.settleConfirm('abort');
 		this.settleQuestion('');
@@ -897,6 +922,214 @@ export class ChatSession {
 		}
 
 		this.inflight?.abort();
+	}
+
+	// Research/Teams: interrupt одного job (без Abort родителя)
+	interruptResearchJob(id: string): void {
+		const trimmed = id.trim();
+		if (!trimmed) {
+			return;
+		}
+		const ctrl = this.researchAborts.get(trimmed);
+		ctrl?.abort();
+		this.researchJobs = upsertResearchJob(this.researchJobs, {
+			id: trimmed,
+			status: 'aborted',
+		});
+		this.busyDetail = researchJobsBusySummary(this.researchJobs);
+		this.emit();
+	}
+
+	// Interrupt всех research jobs текущей сессии
+	interruptAllResearch(): void {
+		for (const [id, ctrl] of this.researchAborts) {
+			ctrl.abort();
+			this.researchJobs = upsertResearchJob(this.researchJobs, {
+				id,
+				status: 'aborted',
+			});
+		}
+		this.researchAborts.clear();
+		this.busyDetail = undefined;
+		this.emit();
+	}
+
+	// Resume одного research job (после aborted/error) - новый turn с task(resume_job_id)
+	resumeResearchJob(id: string): void {
+		const trimmed = id.trim();
+		if (!trimmed) {
+			return;
+		}
+		const job = this.researchJobs.find((j) => j.id === trimmed);
+		if (!job) {
+			return;
+		}
+		if (job.status === 'running' || job.status === 'queued') {
+			return;
+		}
+		const prompt = (job.prompt ?? job.promptPreview).trim();
+		if (!prompt) {
+			return;
+		}
+		const text = [
+			`Возобнови research job \`${trimmed}\` (subagent=${job.subagent}).`,
+			`Вызови tool task с subagent_type=${job.subagent}, resume_job_id=${trimmed}, prompt=...`,
+			'',
+			'# Задание',
+			prompt,
+		].join('\n');
+		void this.send(text);
+	}
+
+	// Открыть child-сессию субагента
+	openChildSession(sessionId: string): void {
+		const trimmed = sessionId.trim();
+		if (!trimmed) {
+			return;
+		}
+		this.switchSession(trimmed);
+	}
+
+	// Прикрепить transcript research job в текущий чат
+	attachResearchTranscript(id: string): void {
+		const trimmed = id.trim();
+		if (!trimmed) {
+			return;
+		}
+		const job = this.researchJobs.find((j) => j.id === trimmed);
+		if (!job?.reportSnippet?.trim()) {
+			return;
+		}
+		const content = [
+			`### Research transcript ${job.subagent} (\`${job.id}\`)`,
+			'',
+			job.reportSnippet.trim(),
+		].join('\n');
+		this.append({
+			id: messageId(),
+			role: 'assistant',
+			content,
+		});
+		this.persist();
+		this.emit();
+	}
+
+	// Upsert job + busyDetail из onSubagentJob
+	private applySubagentJob(event: {
+		id: string;
+		status: ResearchJobUi['status'];
+		subagent: string;
+		promptPreview: string;
+		prompt?: string;
+		detail?: string;
+		worktreePath?: string;
+		background?: boolean;
+		mutating?: boolean;
+		reportSnippet?: string;
+		childSessionId?: string;
+	}): void {
+		this.researchJobs = upsertResearchJob(this.researchJobs, {
+			id: event.id,
+			status: event.status,
+			subagent: event.subagent,
+			promptPreview: event.promptPreview,
+			prompt: event.prompt,
+			detail: event.detail,
+			worktreePath: event.worktreePath,
+			background: event.background,
+			mutating: event.mutating,
+			reportSnippet: event.reportSnippet,
+			childSessionId: event.childSessionId,
+			parentSessionId: this.sessions.getCurrentSessionId(),
+		});
+		this.busyDetail = researchJobsBusySummary(this.researchJobs);
+		this.emit();
+	}
+
+	private createJobAbort(jobId: string): AbortSignal {
+		const existing = this.researchAborts.get(jobId);
+		if (existing) {
+			return existing.signal;
+		}
+		const ctrl = new AbortController();
+		this.researchAborts.set(jobId, ctrl);
+		return ctrl.signal;
+	}
+
+	private releaseJobAbort(jobId: string): void {
+		this.researchAborts.delete(jobId);
+	}
+
+	// Child-вкладка для субагента (без переключения фокуса на child)
+	private async openChildSessionForJob(params: {
+		jobId: string;
+		title: string;
+		prompt: string;
+	}): Promise<{ sessionId: string } | undefined> {
+		if (!this.canCreateTab()) {
+			return undefined;
+		}
+		const parentId = this.sessions.getCurrentSessionId();
+		if (!parentId) {
+			return undefined;
+		}
+		// createSession переключает current - сохраняем parent и возвращаемся
+		const created = this.sessions.createSession(params.title.slice(0, 80), {
+			parentSessionId: parentId,
+		});
+		this.ensureRuntime(created.id);
+		this.sessions.switchSession(parentId);
+		this.activateRuntime(parentId);
+		this.sessions.setDraft(params.prompt, undefined, created.id);
+		this.researchJobs = upsertResearchJob(this.researchJobs, {
+			id: params.jobId,
+			status: 'running',
+			subagent: 'child',
+			promptPreview: params.prompt.slice(0, 200),
+			childSessionId: created.id,
+			parentSessionId: parentId,
+		});
+		this.emit();
+		return { sessionId: created.id };
+	}
+
+	// Удалить git worktree субагента (только под `.gen/worktrees/`)
+	async cleanupWorktree(worktreePath: string): Promise<void> {
+		const trimmed = worktreePath.trim();
+		if (!trimmed) {
+			return;
+		}
+		const { removeAgentWorktree } = await import('../agent/worktree');
+		const ok = await removeAgentWorktree(trimmed);
+		if (!ok) {
+			writeLog('agent', `chat.research.cleanupWorktree.failed path=${trimmed}`);
+			return;
+		}
+		// Сбросить worktreePath у завершённых jobs (без трогания status)
+		const next = this.researchJobs.map((job) =>
+			job.worktreePath === trimmed ? { ...job, worktreePath: undefined } : job,
+		);
+		this.researchJobs = next;
+		this.emit();
+	}
+
+	// Удалить worktree у всех завершённых jobs текущей вкладки (scout lifecycle UX)
+	async cleanupAllFinishedWorktrees(): Promise<void> {
+		const paths = [
+			...new Set(
+				this.researchJobs
+					.filter(
+						(j) =>
+							j.worktreePath
+							&& (j.status === 'done' || j.status === 'error' || j.status === 'aborted')
+							&& !j.mutating,
+					)
+					.map((j) => j.worktreePath!),
+			),
+		];
+		for (const p of paths) {
+			await this.cleanupWorktree(p);
+		}
 	}
 
 	// Continue после лимита итераций - тот же history + nudge, новый бюджет N
@@ -2353,21 +2586,36 @@ export class ChatSession {
 						if (!stillActive()) {
 							return;
 						}
-						const status =
-							event.status === 'running'
-								? `research ${event.subagent}: ${event.promptPreview.slice(0, 80)}...`
-								: event.status === 'done'
-									? undefined
-									: `research ${event.status}: ${event.subagent}`;
-						if (event.status === 'running') {
-							rt.busyDetail = status;
-						} else if (event.status === 'done' || event.status === 'aborted') {
-							rt.busyDetail = undefined;
-						} else if (event.detail) {
-							rt.busyDetail = status;
-						}
+						rt.researchJobs = upsertResearchJob(rt.researchJobs ?? [], {
+							id: event.id,
+							status: event.status,
+							subagent: event.subagent,
+							promptPreview: event.promptPreview,
+							prompt: event.prompt,
+							detail: event.detail,
+							worktreePath: event.worktreePath,
+							background: event.background,
+							mutating: event.mutating,
+							reportSnippet: event.reportSnippet,
+							childSessionId: event.childSessionId,
+							parentSessionId: runSessionId,
+						});
+						rt.busyDetail = researchJobsBusySummary(rt.researchJobs);
 						this.emit();
 					},
+					createJobAbort: (jobId) => {
+						const existing = rt.researchAborts.get(jobId);
+						if (existing) {
+							return existing.signal;
+						}
+						const ctrl = new AbortController();
+						rt.researchAborts.set(jobId, ctrl);
+						return ctrl.signal;
+					},
+					releaseJobAbort: (jobId) => {
+						rt.researchAborts.delete(jobId);
+					},
+					openChildSessionForJob: (params) => this.openChildSessionForJob(params),
 					onRetry,
 					onPaused: (info) => {
 						if (!stillActive()) {
@@ -2404,10 +2652,10 @@ export class ChatSession {
 						}
 
 						rt.lastTurnDiff = paths.length > 0
-							? {
-								turnId,
-								paths: [...paths],
-								at: Date.now()
+							? { 
+								turnId, 
+								paths: [...paths], 
+								at: Date.now() 
 							}
 							: undefined;
 						this.emit();
@@ -2686,13 +2934,36 @@ export class ChatSession {
 					if (!stillActive()) {
 						return;
 					}
-					if (event.status === 'running') {
-						rt.busyDetail = `research ${event.subagent}: ${event.promptPreview.slice(0, 80)}...`;
-					} else if (event.status === 'done' || event.status === 'aborted') {
-						rt.busyDetail = undefined;
-					}
+					rt.researchJobs = upsertResearchJob(rt.researchJobs ?? [], {
+						id: event.id,
+						status: event.status,
+						subagent: event.subagent,
+						promptPreview: event.promptPreview,
+						prompt: event.prompt,
+						detail: event.detail,
+						worktreePath: event.worktreePath,
+						background: event.background,
+						mutating: event.mutating,
+						reportSnippet: event.reportSnippet,
+						childSessionId: event.childSessionId,
+						parentSessionId: runSessionId,
+					});
+					rt.busyDetail = researchJobsBusySummary(rt.researchJobs);
 					this.emit();
 				},
+				createJobAbort: (jobId) => {
+					const existing = rt.researchAborts.get(jobId);
+					if (existing) {
+						return existing.signal;
+					}
+					const ctrl = new AbortController();
+					rt.researchAborts.set(jobId, ctrl);
+					return ctrl.signal;
+				},
+				releaseJobAbort: (jobId) => {
+					rt.researchAborts.delete(jobId);
+				},
+				openChildSessionForJob: (params) => this.openChildSessionForJob(params),
 				onRetry,
 				onPaused: (info) => {
 					if (!stillActive()) {
@@ -3099,7 +3370,10 @@ export class ChatSession {
 		}
 
 		this.persist();
-		const created = this.sessions.createSession(params.title?.trim() || undefined);
+		const parentId = this.sessions.getCurrentSessionId();
+		const created = this.sessions.createSession(params.title?.trim() || undefined, {
+			parentSessionId: parentId,
+		});
 		this.activateRuntime(created.id);
 		if (params.mode) {
 			await this.setMode(params.mode);

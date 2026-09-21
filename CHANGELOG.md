@@ -22,6 +22,9 @@
 - **Permissions:** unified edit confirm pipeline - no duplicate Always/Apply after central ask/review (`shouldSkipToolConfirm` / `skipConfirm`); stable `awaiting_confirm` + busyDetail; overwrite-user-edits still forces confirm; compatible with batch Allow remaining
 - **Permissions:** batch edit confirm - several edits in one turn get **Allow remaining edits** on ConfirmCard (turn-scoped; Always / Reject / review diff unchanged; shell and sensitive `.env*` still ask)
 - **Shell:** streaming partial stdout/stderr for long `run_command` / `run_tests` / `run_scratch` (tool card + busyDetail, 120ms throttle); AbortSignal cancel without status races
+- **Teams UI:** ResearchJobsPanel + Teams - subagent job cards (status / interrupt / attach transcript), parent<->child session linking
+- **Subagents:** `task` `background` / interrupt / resume; `prompts[]` fan-out; `allow_mutating_parallel` for mutating parallel (per-job worktree); scout/explore `cleanup_worktree` + Teams bulk cleanup
+- **Project:** `synthesize` writes aggregate reports under `.gen/reports/`
 
 ## 0.4.0 (11 September 2026)
 

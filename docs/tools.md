@@ -91,7 +91,16 @@ Confirmations are a **card in Gen chat** (Apply / Skip / Stop or Apply / Reject)
 - Large file: short `write_file` scaffold, then `apply_patch` in chunks.
 - After successful `write_file` / `apply_patch`, if the file has diagnostics, the tool result appends a short nudge (tool still succeeds). Opt-in `formatAfterEdit` in settings runs `editor.action.formatDocument` after those edits.
 - Optional setting `primaryTools` (tool names, one per line): when non-empty, only those tools are offered to the primary agent (`list_mcp_tools` stays available; empty filter falls back to all). Subagents ignore this list. Include `execute` explicitly if you use a primary allowlist with code-mode.
-- Subagent tool `task`: optional git worktree via setting `worktreesEnabled` or arg `use_worktree`. Creates branch under `.gen/worktrees/<slug>/` (fallback: sibling `*.gen-worktrees/`). Optional `worktreeStartCommand` runs once after create. Worktrees are not auto-deleted. Non-git workspace * skipped, normal subagent.
+- Subagent tool `task` (`explore` / `general` / `scout` / presets / `.gen/agents/`):
+  - `prompt` - single job; or `prompts[]` - fan-out (read-only research by default).
+  - `max_parallel` - concurrency for `prompts[]` (default 3, max 6).
+  - `background` / `run_in_background` - return job ids immediately; parent is not blocked.
+  - `allow_mutating_parallel` - required for `prompts[]` on non-readonly agents (e.g. `general`); each job gets its own worktree.
+  - `synthesize` - write aggregate markdown under `.gen/reports/` (default **true** in Project mode).
+  - `open_child_session` - create a child chat tab (parent<->child Teams UI).
+  - `resume_job_id` - restart a previous aborted/error job (same id prefix).
+  - `cleanup_worktree` - after successful **readonly** job, remove the created worktree (default **true** for explore/scout; never auto-deletes mutating worktrees). Teams UI can also cleanup finished worktrees.
+  - Optional git worktree via setting `worktreesEnabled` or arg `use_worktree`. Creates branch under `.gen/worktrees/<slug>/` (fallback: sibling `*.gen-worktrees/`). Optional `worktreeStartCommand` runs once after create. Non-git workspace -> skipped, normal subagent.
 - Experimental **code-mode** (`codeModeEnabled`, default off): tool `execute` runs a JSON array of steps `[{ "tool": "server__toolName", "arguments": { ... } }, ...]` (or the same array as a `script` JSON string). Only declared MCP tools by name - **no** host `eval` / Node / `require` / `fs`. Each step reuses the `call_mcp_tool` approval path. Max 32 steps per call.
 - Project overview: `project_map` for a cached module tree; prefer `find_code` (intent: `symbol` \| `path` \| `text` \| `mixed`) to fan out across path/text/index/semantic/symbols; `find_symbol` for LSP cache; `pack_context` / `similar_code` for task-scoped packs and duplicates; `codebase_search` for the trigram index alone; exact grep - `grep` / `glob`.
 - If the user edited a file after the agent: full `write_file` is rejected; patch via `apply_patch` / `apply_workspace_edit` after a fresh `read_file`.

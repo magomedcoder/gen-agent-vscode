@@ -22,6 +22,9 @@
 - **Permissions:** единый pipeline confirm на edits - без дублей Always/Apply после central ask/review (`shouldSkipToolConfirm` / `skipConfirm`); стабильные `awaiting_confirm` + busyDetail; conflict overwrite user edits через forceConfirm; совместимо с batch «Allow remaining»
 - **Permissions:** batch confirm правок - при нескольких edits в одном turn на ConfirmCard есть **Allow remaining edits** / «Разрешить остальные правки» (только этот turn; Always / Reject / review diff без изменений; shell и `.env*` по-прежнему ask)
 - **Shell:** потоковый stdout/stderr для long `run_command` / `run_tests` / `run_scratch` (карточка tool + busyDetail, throttle 120ms); cancel через AbortSignal без гонок status
+- **Teams UI:** ResearchJobsPanel + Teams - карточки jobs субагентов (статус / interrupt / attach transcript), связка parent<->child сессий
+- **Субагенты:** `task` `background` / interrupt / resume; fan-out `prompts[]`; `allow_mutating_parallel` для mutating parallel (worktree на job); scout/explore `cleanup_worktree` + bulk cleanup в Teams
+- **Project:** `synthesize` пишет aggregate-отчёты в `.gen/reports/`
 
 ## 0.4.0 (11 сентября 2026)
 

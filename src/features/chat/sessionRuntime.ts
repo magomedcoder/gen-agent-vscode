@@ -2,7 +2,7 @@ import { AgentCheckpoint } from '../agent/checkpoint';
 import { AgentWriteTracker } from '../agent/userEdits';
 import type { ConfirmChoice } from '../agent/types';
 import type { ImageAttachment } from './attachments';
-import type { AgentPausedState, ChatTodoItem, ChatUiMessage, PendingConfirm, PendingQuestion, SessionDiffEvent } from './protocol';
+import type { AgentPausedState, ChatTodoItem, ChatUiMessage, PendingConfirm, PendingQuestion, ResearchJobUi, SessionDiffEvent } from './protocol';
 
 // Запись undo/redo одного user-хода
 export interface TurnHistoryEntry {
@@ -30,6 +30,10 @@ export interface SessionRuntime {
 	pendingConfirm?: PendingConfirmInternal;
 	pendingQuestion?: PendingQuestionInternal;
 	todos: ChatTodoItem[];
+	// Live research/subagent jobs (Teams UI)
+	researchJobs?: ResearchJobUi[];
+	// Per-job AbortController (interrupt одного research без Stop parent)
+	researchAborts: Map<string, AbortController>;
 	agentPaused?: AgentPausedState;
 	toolAborts: Map<string, AbortController>;
 	activeToolCallId?: string;
@@ -50,6 +54,8 @@ export function createSessionRuntime(messages: ChatUiMessage[] = []): SessionRun
 		messages: [...messages],
 		turnQueue: [],
 		todos: [],
+		researchJobs: [],
+		researchAborts: new Map(),
 		toolAborts: new Map(),
 		sessionAllow: [],
 		undoStack: [],
@@ -72,6 +78,22 @@ export function abortSessionRuntime(rt: SessionRuntime): void {
 	
 	rt.toolAborts.clear();
 	rt.activeToolCallId = undefined;
+	for (const ctrl of rt.researchAborts.values()) {
+		ctrl.abort();
+	}
+	rt.researchAborts.clear();
+	if (rt.researchJobs?.length) {
+		const now = Date.now();
+		rt.researchJobs = rt.researchJobs.map((job) =>
+			job.status === 'running' || job.status === 'queued'
+				? {
+					...job,
+					status: 'aborted' as const,
+					finishedAt: now
+				}
+				: job,
+		);
+	}
 	rt.agentPaused = undefined;
 	if (rt.pendingConfirm) {
 		const pending = rt.pendingConfirm;

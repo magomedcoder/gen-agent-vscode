@@ -286,6 +286,48 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				await this.session.openEditedPath(path);
 				return;
 			}
+			case 'interruptResearchJob': {
+				const id = (msg.id ?? msg.jobId ?? '').trim();
+				if (id) {
+					this.session.interruptResearchJob(id);
+				}
+				return;
+			}
+			case 'interruptAllResearch':
+				this.session.interruptAllResearch();
+				return;
+			case 'resumeResearchJob': {
+				const id = (msg.id ?? msg.jobId ?? '').trim();
+				if (id) {
+					this.session.resumeResearchJob(id);
+				}
+				return;
+			}
+			case 'openChildSession':
+				this.session.openChildSession(msg.sessionId);
+				return;
+			case 'attachResearchTranscript': {
+				const id = (msg.id ?? msg.jobId ?? '').trim();
+				if (id) {
+					this.session.attachResearchTranscript(id);
+				}
+				return;
+			}
+			case 'cleanupWorktree':
+			case 'removeWorktree':
+				await this.session.cleanupWorktree(msg.path);
+				return;
+			case 'cleanupAllFinishedWorktrees':
+				await this.session.cleanupAllFinishedWorktrees();
+				return;
+			case 'openProjectReport': {
+				const path = String(msg.path ?? '').trim();
+				if (!path) {
+					return;
+				}
+				await this.session.openEditedPath(path);
+				return;
+			}
 		}
 	}
 

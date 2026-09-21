@@ -99,12 +99,13 @@ export function buildAgentSystemPrompt(options?: {
 	} else if (mode === 'multitask') {
 		lines.push(
 			'Режим Multitask: ты координатор. Мутирующие tools недоступны - поручай подзадачи через task (explore / general / scout / docs-researcher / code-reviewer / кастомные агенты из `.gen/agents/`).',
+			'Fan-out: независимые read-only подзадачи - task с prompts[] (+ max_parallel). Долгие jobs - background. Параллельный general - только с allow_mutating_parallel (отдельные worktree).',
 			'Сам читай код, строй план (propose_plan / write_plan), собирай отчёты субагентов и давай итоговый ответ.',
 		);
 	} else if (mode === 'project') {
 		lines.push(
 			'Режим Project (teams): ты тимлид команды агентов. Мутирующие tools недоступны - делегируй работу через tool task (explore / general / scout / docs-researcher / code-reviewer / кастомные агенты из `.gen/agents/`).',
-			'Алгоритм тимлида: 1) уточни цель и разбей на подзадачи; 2) выбери подходящего субагента под каждую; 3) parallel где независимо; 4) после каждого task - синтезируй отчёт в общий план/итог; 5) не оставляй сырые отчёты субагентов без сводки для пользователя.',
+			'Алгоритм тимлида: 1) уточни цель и разбей на подзадачи; 2) выбери подходящего субагента под каждую; 3) parallel где независимо (prompts[] / max_parallel; background для долгих; allow_mutating_parallel для parallel general); 4) после каждого task - синтезируй отчёт в общий план/итог (synthesize -> `.gen/reports/`); 5) не оставляй сырые отчёты субагентов без сводки для пользователя.',
 			'Сам: читай код, координируй, держи propose_plan / write_plan / update_plan, дай итоговый ответ. Не правь файлы сам - только через делегирование general (или выход в /agent).',
 			'Слэш: /project включает режим; /agent или /ask - выход. Подсказка: после возврата task всегда синтезируй результат команды.',
 		);
@@ -126,7 +127,7 @@ export function buildAgentSystemPrompt(options?: {
 			'После правок проверяй get_diagnostics. git_status - только чтение, без commit/push.',
 			'Логи: find_logs, read_log_tail. UI: open_browser, fetch_page.',
 			'Тесты: run_tests (если в проекте находится команда test) или run_command. Команды без allowlist языков; запрещены rm, curl, install, git push, eval (-e / -c с кодом). Подтверждения - по approvalPolicy / autoApprove в настройках Безопасность.',
-			'Режимы: plan_enter / plan_exit / switch_mode (ask|agent|debug|design|plan|multitask|project). Субагенты: task (prompts[] = параллельный read-only research). Handoff: new_task. Обзор модуля: list_code_definition_names. Deep planning: /deep-planning. Кастомные агенты: generate_agent -> `.gen/agents/`.',
+			'Режимы: plan_enter / plan_exit / switch_mode (ask|agent|debug|design|plan|multitask|project). Субагенты: task (prompts[] = fan-out research; background; allow_mutating_parallel для parallel general; synthesize -> `.gen/reports/`). Handoff: new_task. Обзор модуля: list_code_definition_names. Deep planning: /deep-planning. Кастомные агенты: generate_agent -> `.gen/agents/`.',
 			planWriteToFile
 				? 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план пишется в `.gen/plan.md`. Опциональный slug - ещё `.gen/plans/<slug>.md`. write_plan / list_plans для multi-plan. Прогресс: update_plan. Один файл можно править без плана.'
 				: 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план только в памяти на текущую сессию (запись sticky файла отключена). write_plan всё ещё пишет в `.gen/plans/`. Прогресс: update_plan. Один файл можно править без плана.',

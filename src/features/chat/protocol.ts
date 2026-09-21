@@ -102,6 +102,28 @@ export interface ChatTodoItem {
 	status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
 }
 
+// Статус research/subagent job для Teams UI
+export type ResearchJobStatus = 'running' | 'done' | 'error' | 'aborted' | 'queued';
+
+// Карточка research job в chat state (host заполняет, webview только отображает/шлёт interrupt)
+export interface ResearchJobUi {
+	id: string;
+	status: ResearchJobStatus;
+	subagent: string;
+	promptPreview: string;
+	// Полный prompt для resume (не обязательно показывать в UI)
+	prompt?: string;
+	detail?: string;
+	parentSessionId?: string;
+	childSessionId?: string;
+	worktreePath?: string;
+	background?: boolean;
+	mutating?: boolean;
+	startedAt?: number;
+	finishedAt?: number;
+	reportSnippet?: string;
+}
+
 // Файлы, изменённые успешными mutating-tools за один agent run
 export interface SessionDiffEvent {
 	turnId: string;
@@ -186,6 +208,8 @@ export interface ChatViewState {
 	composerDraft?: string;
 	// Chips Composer (insert-строки mention) для текущей сессии
 	composerChips?: string[];
+	// Live research/subagent jobs (Teams UI)
+	researchJobs?: ResearchJobUi[];
 }
 
 export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
@@ -306,4 +330,14 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'cancelToolCall'; id: string }
 	| { type: 'dismissPlanHandoff' }
 	| { type: 'dismissTurnDiff' }
-	| { type: 'openPath'; path: string };
+	| { type: 'openPath'; path: string }
+	// Research / Teams
+	| { type: 'interruptResearchJob'; id?: string; jobId?: string }
+	| { type: 'interruptAllResearch' }
+	| { type: 'resumeResearchJob'; id?: string; jobId?: string }
+	| { type: 'openChildSession'; sessionId: string }
+	| { type: 'attachResearchTranscript'; id?: string; jobId?: string }
+	| { type: 'cleanupWorktree'; path: string }
+	| { type: 'removeWorktree'; path: string }
+	| { type: 'cleanupAllFinishedWorktrees' }
+	| { type: 'openProjectReport'; path: string };
