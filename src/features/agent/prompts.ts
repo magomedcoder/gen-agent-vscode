@@ -76,8 +76,8 @@ export function buildAgentSystemPrompt(options?: {
 
 	if (mode === 'debug') {
 		lines.push(
-			`Алгоритм Debug: 1) get_diagnostics и/или find_logs; 2) read_log_tail по подозрительным файлам; 3) при необходимости read_file / grep / glob / codebase_search по коду из stack trace; 4) предложи гипотезу причины и точечный фикс (${patchHint}).`,
-			'Не правь наугад: сначала факты из логов и диагностик. Цитируй ключевые строки ошибок.',
+			`Алгоритм Debug: 1) get_diagnostics и/или буфер терминалов (@terminals / Live terminals); 2) find_logs + read_log_tail по подозрительным файлам; 3) при необходимости read_file / grep / glob / codebase_search по коду из stack trace; 4) предложи гипотезу причины и точечный фикс (${patchHint}).`,
+			'В Debug Mode хвосты открытых терминалов (Shell Integration) подмешиваются автоматически; явно можно добавить @terminals. Не правь наугад: сначала факты из терминала, логов и диагностик. Цитируй ключевые строки ошибок.',
 		);
 	} else if (mode === 'design') {
 		lines.push(

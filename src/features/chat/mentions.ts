@@ -396,15 +396,21 @@ function resolveTerminalsContext(query?: string): string {
 
 	const q = query?.trim() ?? '';
 	const hits: MentionRetrievalHit[] = terminals.map((t, i) => {
-		const body = t.text.trim()
+		const meta = [
+			t.lastCommand ? `cmd: ${t.lastCommand}` : undefined,
+			typeof t.exitCode === 'number' ? `exit: ${t.exitCode}` : undefined,
+		].filter(Boolean).join('; ');
+		const bodyCore = t.text.trim()
 			? (t.text.length > perCap ? `${t.text.slice(-perCap)}\n...` : t.text)
 			: '(нет буферизованного вывода - выполни команду в терминале)';
+		const body = meta ? `${meta}\n${bodyCore}` : bodyCore;
 		const lexical = scoreQueryRelevance(`${t.name}\n${body}`, q);
 		const hasOutput = t.text.trim() ? 0.12 : 0;
-		// Без query - чуть предпочитаем терминалы с выводом; иначе lexical
+		const failedBoost = typeof t.exitCode === 'number' && t.exitCode !== 0 ? 0.15 : 0;
+		// Без query - чуть предпочитаем терминалы с выводом / ошибкой; иначе lexical
 		const score = q
-			? Math.min(1, lexical + hasOutput)
-			: Math.min(1, hasOutput + (terminals.length - i) * 0.01);
+			? Math.min(1, lexical + hasOutput + failedBoost)
+			: Math.min(1, hasOutput + failedBoost + (terminals.length - i) * 0.01);
 		return {
 			path: t.name,
 			header: t.name,

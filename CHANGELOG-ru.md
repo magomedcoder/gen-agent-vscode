@@ -25,6 +25,7 @@
 - **Teams UI:** ResearchJobsPanel + Teams - карточки jobs субагентов (статус / interrupt / attach transcript), связка parent<->child сессий
 - **Субагенты:** `task` `background` / interrupt / resume; fan-out `prompts[]`; `allow_mutating_parallel` для mutating parallel (worktree на job); scout/explore `cleanup_worktree` + bulk cleanup в Teams
 - **Project:** `synthesize` пишет aggregate-отчёты в `.gen/reports/`
+- **Debug:** живой захват терминала через Shell Integration (`onDidStartTerminalShellExecution` + meta cmd/exit); ANSI срезается; в Debug Mode хвосты терминалов подмешиваются сами (если нет явного `@terminals`); `@terminals` выше ранжирует ненулевой exit
 
 ## 0.4.0 (11 сентября 2026)
 

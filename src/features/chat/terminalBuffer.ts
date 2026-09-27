@@ -3,7 +3,24 @@ import * as vscode from 'vscode';
 // Сколько символов держим на терминал в ring-буфере
 const MAX_BUFFER_CHARS = 8_000;
 
-const buffers = new Map<string, string>();
+export interface TerminalBufferSnapshot {
+	name: string;
+	text: string;
+	lastCommand?: string;
+	exitCode?: number;
+	updatedAt?: number;
+}
+
+interface TerminalBufferEntry {
+	text: string;
+	lastCommand?: string;
+	exitCode?: number;
+	updatedAt: number;
+	// Поколение активного read(), чтобы не писать устаревший stream
+	readGen: number;
+}
+
+const buffers = new Map<string, TerminalBufferEntry>();
 let started = false;
 let subscription: vscode.Disposable | undefined;
 
@@ -11,20 +28,76 @@ function terminalKey(term: vscode.Terminal): string {
 	return term.name || 'Terminal';
 }
 
+function getOrCreate(key: string): TerminalBufferEntry {
+	let entry = buffers.get(key);
+	if (!entry) {
+		entry = {
+			text: '',
+			updatedAt: Date.now(),
+			readGen: 0,
+		};
+		buffers.set(key, entry);
+	}
+
+	return entry;
+}
+
+// Убрать ANSI / OSC escape-последовательности из вывода терминала
+export function stripAnsi(raw: string): string {
+	if (!raw) {
+		return '';
+	}
+
+	return raw
+		// OSC (operating system command) sequences ... BEL or ST
+		.replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, '')
+		// CSI sequences
+		.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
+		// Remaining ESC + final byte
+		.replace(/\u001b[@-Z\\-_]/g, '')
+		.replace(/\r/g, '');
+}
+
 function append(key: string, data: string): void {
-	if (!data) {
+	const cleaned = stripAnsi(data);
+	if (!cleaned) {
 		return;
 	}
 
-	const prev = buffers.get(key) ?? '';
-	const next = (prev + data).length > MAX_BUFFER_CHARS ? (prev + data).slice(-MAX_BUFFER_CHARS) : prev + data;
-	buffers.set(key, next);
+	const entry = getOrCreate(key);
+	const next = (entry.text + cleaned).length > MAX_BUFFER_CHARS
+		? (entry.text + cleaned).slice(-MAX_BUFFER_CHARS)
+		: entry.text + cleaned;
+	entry.text = next;
+	entry.updatedAt = Date.now();
+}
+
+async function streamExecution(
+	key: string,
+	execution: vscode.TerminalShellExecution,
+	gen: number,
+): Promise<void> {
+	try {
+		for await (const data of execution.read()) {
+			const entry = buffers.get(key);
+			if (!entry || entry.readGen !== gen) {
+				break;
+			}
+
+			append(key, data);
+			if ((entry.text?.length ?? 0) >= MAX_BUFFER_CHARS) {
+				break;
+			}
+		}
+	} catch {}
 }
 
 /**
- * Подписка на вывод терминалов через стабильный API `onDidEndTerminalShellExecution` + `execution.read()`.
+ * Подписка на вывод терминалов через Shell Integration:
+ * - `onDidStartTerminalShellExecution` + `execution.read()` - live stream во время команды
+ * - `onDidEndTerminalShellExecution` - exitCode / commandLine
  *
- * Не используем proposed `onDidWriteTerminalData`: без `enabledApiProposals` VS Code падает при активации расширения.
+ * Не используем proposed `onDidWriteTerminalData`.
  * Идемпотентно - повторный вызов безопасен.
  */
 export function ensureTerminalBufferListener(): vscode.Disposable {
@@ -36,19 +109,53 @@ export function ensureTerminalBufferListener(): vscode.Disposable {
 	const disposables: vscode.Disposable[] = [];
 
 	disposables.push(
+		vscode.window.onDidStartTerminalShellExecution((e) => {
+			const key = terminalKey(e.terminal);
+			const entry = getOrCreate(key);
+			entry.readGen += 1;
+			const gen = entry.readGen;
+			const cmd = e.execution.commandLine?.value?.trim();
+			if (cmd) {
+				entry.lastCommand = cmd;
+				entry.exitCode = undefined;
+				append(key, `\n$ ${cmd}\n`);
+			}
+
+			void streamExecution(key, e.execution, gen);
+		}),
+	);
+
+	disposables.push(
 		vscode.window.onDidEndTerminalShellExecution((e) => {
-			void (async () => {
-				try {
-					let chunk = '';
-					for await (const data of e.execution.read()) {
-						chunk += data;
-						if (chunk.length >= MAX_BUFFER_CHARS) {
-							break;
+			const key = terminalKey(e.terminal);
+			const entry = getOrCreate(key);
+			const cmd = e.execution.commandLine?.value?.trim();
+			if (cmd) {
+				entry.lastCommand = cmd;
+			}
+
+			if (typeof e.exitCode === 'number') {
+				entry.exitCode = e.exitCode;
+				append(key, `\n[exit ${e.exitCode}]\n`);
+			}
+
+			entry.updatedAt = Date.now();
+
+			// Fallback: если start-stream не успел (нет shell integration на start) - дочитаем хвост
+			if (!entry.text.trim()) {
+				void (async () => {
+					try {
+						let chunk = '';
+						for await (const data of e.execution.read()) {
+							chunk += data;
+							if (chunk.length >= MAX_BUFFER_CHARS) {
+								break;
+							}
 						}
-					}
-					append(terminalKey(e.terminal), chunk.slice(0, MAX_BUFFER_CHARS));
-				} catch {}
-			})();
+						append(key, chunk.slice(0, MAX_BUFFER_CHARS));
+					} catch {}
+				})();
+			}
 		}),
 	);
 
@@ -68,17 +175,11 @@ export function ensureTerminalBufferListener(): vscode.Disposable {
 	return subscription;
 }
 
-// Снимки буферов открытых терминалов (имя * хвост вывода)
-export function getTerminalBuffers(): Array<{
-	name: string;
-	text: string
-}> {
+// Снимки буферов открытых терминалов (имя * хвост вывода + meta)
+export function getTerminalBuffers(): TerminalBufferSnapshot[] {
 	ensureTerminalBufferListener();
 
-	const out: Array<{ 
-		name: string
-		text: string
-	}> = [];
+	const out: TerminalBufferSnapshot[] = [];
 	const seen = new Set<string>();
 
 	for (const term of vscode.window.terminals) {
@@ -88,11 +189,51 @@ export function getTerminalBuffers(): Array<{
 		}
 
 		seen.add(name);
-		out.push({ 
-			name, 
-			text: buffers.get(name) ?? '' 
+		const entry = buffers.get(name);
+		out.push({
+			name,
+			text: entry?.text ?? '',
+			lastCommand: entry?.lastCommand,
+			exitCode: entry?.exitCode,
+			updatedAt: entry?.updatedAt,
 		});
 	}
 
+	// Свежие сверху
+	out.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 	return out;
+}
+
+/**
+ * Краткий appendix терминалов для Debug Mode (без явного @terminals).
+ * Пусто - если нет терминалов / нет вывода.
+ */
+export function formatDebugTerminalsAppendix(maxTotalChars = 3_000): string | undefined {
+	ensureTerminalBufferListener();
+	const terminals = getTerminalBuffers().filter((t) => t.text.trim() || t.lastCommand);
+	if (terminals.length === 0) {
+		return undefined;
+	}
+
+	const parts: string[] = ['Live terminals (Debug):'];
+	let used = parts[0]!.length;
+	for (const t of terminals.slice(0, 4)) {
+		const meta = [
+			t.lastCommand ? `cmd: ${t.lastCommand}` : undefined,
+			typeof t.exitCode === 'number' ? `exit: ${t.exitCode}` : undefined,
+		].filter(Boolean).join('; ');
+		const header = meta ? `[terminal:${t.name}] (${meta})` : `[terminal:${t.name}]`;
+		const body = t.text.trim()
+			? (t.text.length > 1_200 ? t.text.slice(-1_200) : t.text)
+			: '(нет буферизованного вывода)';
+		const block = `${header}\n${body}`;
+		if (used + block.length + 2 > maxTotalChars) {
+			break;
+		}
+
+		parts.push(block);
+		used += block.length + 2;
+	}
+
+	return parts.length > 1 ? parts.join('\n\n') : undefined;
 }

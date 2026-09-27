@@ -4,6 +4,7 @@
 
 ## dev (Development version)
 
+
 - **Secrets:** unified SecretStorage vault; `webSearchApiKey` no longer in JSON/settings layers (migrate + clear UI); LLM apiKey via same vault
 - **MCP:** per-server Reconnect / Refresh tools, connecting badge, lastConnectedAt; lazy reconnect on call (no full refresh); AbortSignal cancel; `mcpToolResultMaxChars` (default 50000)
 - **Permissions:** opt-in `persistAlwaysAllow` - Always patterns survive reloads (workspaceState); Permissions UI list/clear
@@ -25,6 +26,7 @@
 - **Teams UI:** ResearchJobsPanel + Teams - subagent job cards (status / interrupt / attach transcript), parent<->child session linking
 - **Subagents:** `task` `background` / interrupt / resume; `prompts[]` fan-out; `allow_mutating_parallel` for mutating parallel (per-job worktree); scout/explore `cleanup_worktree` + Teams bulk cleanup
 - **Project:** `synthesize` writes aggregate reports under `.gen/reports/`
+- **Debug:** live terminal capture via Shell Integration (`onDidStartTerminalShellExecution` stream + exit/cmd meta); ANSI stripped; Debug Mode auto-injects terminal tails (unless `@terminals` already present); `@terminals` ranks failed exits higher
 
 ## 0.4.0 (11 September 2026)
 

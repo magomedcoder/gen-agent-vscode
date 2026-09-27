@@ -2484,12 +2484,26 @@ export class ChatSession {
 		const editorCtx = getEditorChatContext();
 		const alwaysOn = await getAlwaysOnWorkspaceContext();
 		const llmUserText = bangs.cleanText || mentions.cleanText || trimmed;
+		const mentionsBlocks = [...(mentions.blocks ?? [])];
+		const mentionsLabels = [...(mentions.labels ?? [])];
+		// Debug Mode: авто-inject хвостов терминалов, если пользователь не добавил @terminals
+		if (settings.chatMode === 'debug' && !mentionsLabels.some((l) => l.includes('@terminals'))) {
+			const { formatDebugTerminalsAppendix } = await import('./terminalBuffer');
+			const terminalsAppendix = formatDebugTerminalsAppendix();
+			if (terminalsAppendix) {
+				mentionsBlocks.push({
+					kind: '@terminals',
+					text: terminalsAppendix,
+				});
+				mentionsLabels.push('@terminals');
+			}
+		}
 		const fitted = this.fitTurnAttachments({
 			editorCtx,
 			alwaysOn,
-			mentionsBlocks: mentions.blocks,
+			mentionsBlocks,
 			mentionsContext: mentions.contextText,
-			mentionsLabels: mentions.labels,
+			mentionsLabels,
 			bangsContext: bangs.contextText,
 			llmUserText,
 			historyMessages: historyBeforeUser,
