@@ -9,8 +9,8 @@ import { applyAdminPolicy, stripAdminLockedForStorage } from './adminPolicy';
 import { deepMerge, getFileSettingsOverlay, initConfigLayers, onConfigLayersChanged, pickNonDefaultSettings } from './layers';
 import { clearCachedNCtx } from '../llm/contextBudget';
 import { DEFAULT_SETTINGS } from './types';
-import type { ChatMode, ChatTextSize, ChatViewLocation, GenSettings, ProviderUsePolicy, RevealOnEdit, ShareMode, ThinkingDisplay, WebSearchBackend } from './types';
-export type { ChatMode, ChatTextSize, ChatViewLocation, CommentStyle, GenSettings, ProviderUsePolicy, RevealOnEdit, ShareMode, ThinkingDisplay, WebSearchBackend } from './types';
+import type { ChatMode, ChatTextSize, ChatViewLocation, GenSettings, ProviderUsePolicy, RevealOnEdit, ShareMode, TabEvictionPolicy, ThinkingDisplay, WebSearchBackend } from './types';
+export type { ChatMode, ChatTextSize, ChatViewLocation, CommentStyle, GenSettings, ProviderUsePolicy, RevealOnEdit, ShareMode, TabEvictionPolicy, ThinkingDisplay, WebSearchBackend } from './types';
 export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS, isAgentLikeMode, resolveModeModel, resolveSmallModel } from './types';
 export { getApiKey, hasApiKey, initApiKeyStore, setApiKey, clearApiKey, getWebSearchApiKey, hasWebSearchApiKey, setWebSearchApiKey, clearWebSearchApiKey } from './apiKey';
 export { initSecretVault } from './secretVault';
@@ -108,6 +108,10 @@ function normalizeChatViewLocation(raw: unknown): ChatViewLocation {
 	}
 
 	return 'both';
+}
+
+function normalizeTabEvictionPolicy(raw: unknown): TabEvictionPolicy {
+	return raw === 'block' || raw === 'closeOldestIdle' ? raw : DEFAULT_SETTINGS.tabEvictionPolicy;
 }
 
 function normalizeWebSearchBackend(raw: unknown): WebSearchBackend {
@@ -317,6 +321,7 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		chatViewLocation: normalizeChatViewLocation(raw.chatViewLocation),
 		maxTabCount: clamp(Math.floor(asNumber(raw.maxTabCount, DEFAULT_SETTINGS.maxTabCount)), 1, 40),
 		maxConcurrentRuns: clamp(Math.floor(asNumber(raw.maxConcurrentRuns, DEFAULT_SETTINGS.maxConcurrentRuns)), 1, 10),
+		tabEvictionPolicy: normalizeTabEvictionPolicy(raw.tabEvictionPolicy),
 	};
 }
 

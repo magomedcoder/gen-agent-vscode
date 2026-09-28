@@ -5,28 +5,25 @@ import { pathExists, resolveWorkspacePath, throwIfAborted } from '../../workspac
 import { runShellCommand, formatPartialShellPreview } from '../../shellExec';
 import { confirmAlwaysOrSkip } from '../confirm';
 import { toPosixRelative } from '../../policy';
+import { resolveScriptRunner, supportedScratchExtensions } from '../../scriptRunner';
+import { getShellProfileEnv } from '../../../project/shellProfiles';
 
 const SCRATCH_PREFIX = '.gen/scratch/';
-
-const RUNNERS: Record<string, { command: string; argsPrefix: string[] }> = {
-	'.js': { command: 'node', argsPrefix: [] },
-	'.mjs': { command: 'node', argsPrefix: [] },
-	'.cjs': { command: 'node', argsPrefix: [] },
-	// Node 22+: strip types без отдельного transpile / npx
-	'.ts': { command: 'node', argsPrefix: ['--experimental-strip-types'] },
-	'.py': { command: 'python3', argsPrefix: [] },
-	'.sh': { command: 'bash', argsPrefix: [] },
-};
 
 function isUnderScratch(relative: string): boolean {
 	const norm = toPosixRelative(relative).replace(/^\.\//, '');
 	return norm === '.gen/scratch' || norm.startsWith(SCRATCH_PREFIX);
 }
 
+function isBinaryMissing(resultContent: string, command: string): boolean {
+	const lower = resultContent.toLowerCase();
+	return (lower.includes('enoent') || lower.includes('not found') || lower.includes(`'${command.toLowerCase()}'`) || lower.includes(`"${command.toLowerCase()}"`));
+}
+
 // Запуск одноразового скрипта только из `.gen/scratch/**` (не eval произвольного JS)
 export const runScratchTool: ToolDefinition = {
 	name: 'run_scratch',
-	description: 'Запустить файл из `.gen/scratch/` (node/python/bash по расширению). Только пути под `.gen/scratch/**`; с подтверждением.',
+	description: 'Запустить файл из `.gen/scratch/` (node/python/bash/pwsh по расширению, включая .ps1). Только пути под `.gen/scratch/**`; с подтверждением.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -42,6 +39,10 @@ export const runScratchTool: ToolDefinition = {
 			timeout_ms: {
 				type: 'integer',
 				description: 'Таймаут мс (по умолчанию как у run_command)',
+			},
+			profile: {
+				type: 'string',
+				description: 'Имя профиля из `.gen/shell.json`',
 			},
 		},
 		required: ['path'],
@@ -70,12 +71,12 @@ export const runScratchTool: ToolDefinition = {
 		}
 
 		const ext = path.posix.extname(relative).toLowerCase();
-		const runner = RUNNERS[ext];
+		const runner = resolveScriptRunner(ext);
 		if (!runner) {
 			return {
 				ok: false,
 				path: relative,
-				content: `run_scratch: расширение «${ext || '(нет)'}» не поддерживается (ожидаются ${Object.keys(RUNNERS).join(', ')})`,
+				content: `run_scratch: расширение «${ext || '(нет)'}» не поддерживается (ожидаются ${supportedScratchExtensions().join(', ')})`,
 			};
 		}
 
@@ -83,44 +84,83 @@ export const runScratchTool: ToolDefinition = {
 			? args.args.filter((item): item is string => typeof item === 'string')
 			: [];
 		const timeoutMs = asOptionalInt(args, 'timeout_ms');
-		const commandLine = `${runner.command} ${[...runner.argsPrefix, relative, ...scriptArgs].join(' ')}`;
+		const scriptFsPath = resolved.uri.fsPath;
+		const cwd = resolved.folder.uri.fsPath;
 
-		const denied = await confirmAlwaysOrSkip(
-			ctx,
-			vscode.l10n.t('agent.confirm.runCommand', relative),
-			commandLine,
-		);
-		if (denied) {
+		const profileEnv = await getShellProfileEnv({
+			profileName: asString(args, 'profile', ''),
+		});
+		if (profileEnv.error) {
 			return {
-				...denied,
+				ok: false,
 				path: relative,
+				content: `shell profile: ${profileEnv.error}`,
 			};
 		}
 
-		const cwd = resolved.folder.uri.fsPath;
-		const result = await runShellCommand({
-			command: runner.command,
-			args: [...runner.argsPrefix, resolved.uri.fsPath, ...scriptArgs],
-			cwd,
-			timeoutMs,
-			signal: ctx.signal,
-			onPartialOutput: ctx.onPartialOutput
-				? (raw) => {
-					ctx.onPartialOutput!(
-						formatPartialShellPreview({
-							commandLine,
-							cwd,
-							raw,
-						}),
-					);
-				}
-				: undefined,
-		});
+		const tryRun = async (command: string, argsPrefix: string[]) => {
+			const commandLine = `${command} ${[...argsPrefix, relative, ...scriptArgs].join(' ')}`;
+			const denied = await confirmAlwaysOrSkip(
+				ctx,
+				vscode.l10n.t('agent.confirm.runCommand', relative),
+				commandLine,
+			);
+			if (denied) {
+				return {
+					denied: true as const,
+					result: {
+						...denied,
+						path: relative,
+					},
+				};
+			}
 
-		return {
-			ok: result.ok,
-			path: relative,
-			content: result.content,
+			const result = await runShellCommand({
+				command,
+				args: [...argsPrefix, scriptFsPath, ...scriptArgs],
+				cwd,
+				timeoutMs,
+				signal: ctx.signal,
+				allowDeniedBinary: true,
+				env: profileEnv.env,
+				onPartialOutput: ctx.onPartialOutput
+					? (raw) => {
+						ctx.onPartialOutput!(
+							formatPartialShellPreview({
+								commandLine,
+								cwd,
+								raw,
+							}),
+						);
+					}
+					: undefined,
+			});
+
+			return {
+				denied: false as const,
+				result: {
+					ok: result.ok,
+					path: relative,
+					content: result.content,
+				},
+				command,
+			};
 		};
+
+		const primary = await tryRun(runner.command, runner.argsPrefix);
+		if (primary.denied) {
+			return primary.result;
+		}
+
+		if (!primary.result.ok && runner.fallback && isBinaryMissing(primary.result.content, runner.command)) {
+			const fallback = await tryRun(runner.fallback.command, runner.fallback.argsPrefix);
+			if (fallback.denied) {
+				return fallback.result;
+			}
+
+			return fallback.result;
+		}
+
+		return primary.result;
 	},
 };

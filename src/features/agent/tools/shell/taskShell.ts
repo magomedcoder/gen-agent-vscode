@@ -4,6 +4,7 @@ import { throwIfAborted } from '../../workspacePath';
 import { listSubagentIds, resolveSubagent } from '../../subagents';
 import { createAgentWorktree, removeAgentWorktree, shouldUseWorktree } from '../../worktree';
 import { formatResearchAggregateMarkdown, writeProjectSynthesizeReport } from '../../projectSynthesize';
+import { compileNotifyPattern, matchNotifyOnOutput } from '../../notifyOnOutput';
 import { confirmAlwaysOrSkip } from '../confirm';
 
 export interface TaskToolContext extends ToolContext {
@@ -671,7 +672,7 @@ export const taskTool: ToolDefinition = {
 
 export const awaitShellTool: ToolDefinition = {
 	name: 'await_shell',
-	description: 'Дождаться фонового job от run_command (background=true), проверить статус по job_id, или дождаться regex в выводе (notify_on_output).',
+	description: 'Дождаться фонового job от run_command (background=true), проверить статус по job_id, или дождаться regex в **новом** выводе (notify_on_output; ANSI срезается; без false positive на старый буфер).',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -685,7 +686,7 @@ export const awaitShellTool: ToolDefinition = {
 			},
 			notify_on_output: {
 				type: 'string',
-				description: 'Regex по полному буферу вывода job; при совпадении вернуть результат до exit (с учётом debounce_ms)',
+				description: 'Regex только по выводу, появившемуся после вызова await_shell (не по всей истории job)',
 			},
 			debounce_ms: {
 				type: 'integer',
@@ -717,27 +718,42 @@ export const awaitShellTool: ToolDefinition = {
 		const patternRaw = asString(args, 'notify_on_output').trim();
 		let notifyPattern: RegExp | undefined;
 		if (patternRaw) {
-			try {
-				notifyPattern = new RegExp(patternRaw);
-			} catch (err) {
+			const compiled = compileNotifyPattern(patternRaw);
+			if (!compiled.ok) {
 				return {
 					ok: false,
-					content: `Некорректный regex notify_on_output: ${err instanceof Error ? err.message : String(err)}`,
+					content: `Некорректный regex notify_on_output: ${compiled.error}`,
 				};
 			}
+
+			notifyPattern = compiled.pattern;
 		}
 
 		const debounceMs = Math.max(0, asOptionalInt(args, 'debounce_ms') ?? 0);
 		const timeoutMs = Math.min(300_000, Math.max(1000, Number(args.timeout_ms) || 60_000));
 		const deadline = Date.now() + timeoutMs;
+		// Матчим только новый вывод - срез на старте await
+		const fromOffset = job.output.length;
 		let lastLen = job.output.length;
 		let lastGrowthAt = Date.now();
+		let matchLatched = false;
 
 		const matchedAndSettled = (): boolean => {
-			if (!notifyPattern || !notifyPattern.test(job.output)) {
+			if (!notifyPattern) {
 				return false;
 			}
 
+			const hit = matchNotifyOnOutput({
+				output: job.output,
+				fromOffset,
+				pattern: notifyPattern,
+			});
+			if (!hit.matched) {
+				matchLatched = false;
+				return false;
+			}
+
+			matchLatched = true;
 			if (job.done || debounceMs === 0) {
 				return true;
 			}
@@ -745,18 +761,36 @@ export const awaitShellTool: ToolDefinition = {
 			return Date.now() - lastGrowthAt >= debounceMs;
 		};
 
+		if (notifyPattern) {
+			ctx.onPartialOutput?.(
+				`await_shell: watching /${patternRaw}/ on ${jobId} (from offset ${fromOffset})...`,
+			);
+		}
+
 		while (!job.done && Date.now() < deadline) {
 			throwIfAborted(ctx.signal);
 			const len = job.output.length;
 			if (len !== lastLen) {
 				lastLen = len;
 				lastGrowthAt = Date.now();
+				if (notifyPattern) {
+					const preview = matchNotifyOnOutput({
+						output: job.output,
+						fromOffset,
+						pattern: notifyPattern,
+					});
+					ctx.onPartialOutput?.(
+						preview.matched
+							? `await_shell: MATCH /${patternRaw}/ (debounce ${debounceMs}ms)\n${preview.slice.slice(-800)}`
+							: `await_shell: watching /${patternRaw}/...\n${preview.slice.slice(-400)}`,
+					);
+				}
 			}
 
 			if (matchedAndSettled()) {
 				return {
 					ok: true,
-					content: `совпадение notify_on_output: /${patternRaw}/\n` +
+					content: `совпадение notify_on_output: /${patternRaw}/ (новый вывод)\n` +
 						shell.formatJob(job) +
 						(job.done ? '' : '\n(статус: ещё выполняется / совпал паттерн)'),
 				};
@@ -767,7 +801,7 @@ export const awaitShellTool: ToolDefinition = {
 		if (matchedAndSettled()) {
 			return {
 				ok: job.done ? job.exitCode === 0 : true,
-				content: `совпадение notify_on_output: /${patternRaw}/\n` +
+				content: `совпадение notify_on_output: /${patternRaw}/ (новый вывод)\n` +
 					shell.formatJob(job) +
 					(job.done ? '' : '\n(статус: ещё выполняется / совпал паттерн)'),
 			};
@@ -775,7 +809,9 @@ export const awaitShellTool: ToolDefinition = {
 
 		return {
 			ok: job.done ? job.exitCode === 0 : true,
-			content: shell.formatJob(job) + (job.done ? '' : '\n(статус: ещё выполняется / таймаут ожидания)'),
+			content: shell.formatJob(job)
+				+ (job.done ? '' : '\n(статус: ещё выполняется / таймаут ожидания)')
+				+ (notifyPattern && !matchLatched ? `\n(notify_on_output /${patternRaw}/: нет совпадения в новом выводе)` : ''),
 		};
 	},
 };

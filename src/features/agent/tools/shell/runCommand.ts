@@ -6,6 +6,7 @@ import { formatCommandLine } from '../../commandPolicy';
 import { confirmAlwaysOrSkip } from '../confirm';
 import type { ShellSession } from '../../shellSession';
 import { runBeforeShellHook, runShellEnvHook } from '../../../project/hooks';
+import { getShellProfileEnv, mergeEnvLayers } from '../../../project/shellProfiles';
 
 function asStringArray(args: Record<string, unknown>, key: string): string[] {
 	const value = args[key];
@@ -42,6 +43,10 @@ export const runCommandTool: ToolDefinition = {
 			background: {
 				type: 'boolean',
 				description: 'Запустить в фоне и вернуть job_id',
+			},
+			profile: {
+				type: 'string',
+				description: 'Имя профиля из `.gen/shell.json` (иначе defaultProfile / GEN_SHELL_PROFILE)',
 			},
 		},
 		required: ['command'],
@@ -95,7 +100,20 @@ export const runCommandTool: ToolDefinition = {
 				content: envHook.stderr?.trim() || vscode.l10n.t('chat.hooks.veto', 'shell.env', commandLine),
 			};
 		}
-		const envExtra = envHook.env ?? {};
+
+		const profileEnv = await getShellProfileEnv({
+			profileName: asString(args, 'profile', ''),
+		});
+		if (profileEnv.error) {
+			return {
+				ok: false,
+				path: relative,
+				content: `shell profile: ${profileEnv.error}`,
+			};
+		}
+
+		// Profile -> hook (hook перекрывает)
+		const envExtra = mergeEnvLayers(profileEnv.env, envHook.env);
 
 		if (background) {
 			if (!shell) {

@@ -263,6 +263,13 @@
       },
       {
         "fileMatch": [
+          "**/.gen/shell.json",
+          "**/gen/shell.json"
+        ],
+        "url": "./schemas/gen-shell.schema.json"
+      },
+      {
+        "fileMatch": [
           "**/.gen/references.json",
           "**/.gen/references/*.json"
         ],

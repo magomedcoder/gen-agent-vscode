@@ -257,6 +257,11 @@
 			"maximum": 10,
 			"description": "Max concurrent agent runs across tabs"
 		},
+		"tabEvictionPolicy": {
+			"type": "string",
+			"enum": ["block", "closeOldestIdle"],
+			"description": "When at maxTabCount: block new tabs, or close oldest idle (not current/busy)"
+		},
 		"toolOutputMaxChars": {
 			"type": "integer",
 			"minimum": 0

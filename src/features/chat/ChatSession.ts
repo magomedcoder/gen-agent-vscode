@@ -28,6 +28,7 @@ import { focusChatView } from './focusChat';
 import type { AgentPausedState, ChatTodoItem, ChatUiMessage, ChatViewState, PendingConfirm, ResearchJobUi, SessionDiffEvent, ToWebviewMessage } from './protocol';
 import { recordActivity } from '../../core/stores/activityStore';
 import { SessionStore, fallbackTitleFromMessages, isDefaultSessionTitle, setSessionPeek } from './sessionStore';
+import { pickTabsToEvict } from './tabEviction';
 import { abortSessionRuntime, createSessionRuntime } from './sessionRuntime';
 import type { PendingConfirmInternal, PendingQuestionInternal, SessionRuntime } from './sessionRuntime';
 import { researchJobsBusySummary, upsertResearchJob } from '../agent/researchJobs';
@@ -523,6 +524,60 @@ export class ChatSession {
 		return this.sessions.listSessions().length < max;
 	}
 
+	/**
+	 * При лимите вкладок: по policy закрыть oldest idle (не current, не busy).
+	 * @returns сколько вкладок закрыли
+	 */
+	private evictIdleTabsForSlot(needSlots = 1): number {
+		const settings = getSettings();
+		const busyIds = new Set<string>();
+		for (const [id, rt] of this.runtimes) {
+			if (rt.inflight) {
+				busyIds.add(id);
+			}
+		}
+
+		const toEvict = pickTabsToEvict({
+			sessions: this.sessions.listSessions().map((s) => ({
+				id: s.id,
+				updatedAt: s.updatedAt,
+			})),
+			busyIds,
+			currentId: this.sessions.getCurrentSessionId(),
+			maxTabs: settings.maxTabCount,
+			needSlots,
+			policy: settings.tabEvictionPolicy,
+		});
+
+		for (const id of toEvict) {
+			const rt = this.runtimes.get(id);
+			if (rt) {
+				abortSessionRuntime(rt);
+				this.runtimes.delete(id);
+			}
+
+			this.sessions.deleteSession(id);
+		}
+
+		return toEvict.length;
+	}
+
+	// true если после eviction есть свободный слот
+	private ensureTabSlot(): boolean {
+		if (this.canCreateTab()) {
+			return true;
+		}
+
+		const n = this.evictIdleTabsForSlot(1);
+		if (n > 0) {
+			void vscode.window.showInformationMessage(
+				vscode.l10n.t('chat.session.evictedTabs', n, getSettings().maxTabCount),
+			);
+		}
+
+		return this.canCreateTab();
+	}
+
 	// Можно ли стартовать новый run (не считая уже busy текущей вкладки - там очередь)
 	private canStartConcurrentRun(): boolean {
 		const max = getSettings().maxConcurrentRuns;
@@ -544,7 +599,7 @@ export class ChatSession {
 	}
 
 	createSession(): void {
-		if (!this.canCreateTab()) {
+		if (!this.ensureTabSlot()) {
 			this.notifyMaxTabs();
 			return;
 		}
@@ -599,7 +654,7 @@ export class ChatSession {
 	}
 
 	forkFromMessage(messageId: string): void {
-		if (!this.canCreateTab()) {
+		if (!this.ensureTabSlot()) {
 			this.notifyMaxTabs();
 			return;
 		}
@@ -3378,7 +3433,7 @@ export class ChatSession {
 		mode?: import('../../core/config/types').ChatMode;
 		autoStart?: boolean;
 	}): Promise<{ sessionId: string; title: string }> {
-		if (!this.canCreateTab()) {
+		if (!this.ensureTabSlot()) {
 			this.notifyMaxTabs();
 			throw new Error(vscode.l10n.t('chat.session.maxTabs', getSettings().maxTabCount));
 		}

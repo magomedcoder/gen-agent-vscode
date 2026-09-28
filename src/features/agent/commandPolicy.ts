@@ -43,6 +43,41 @@ function looksLikeFileOperand(arg: string): boolean {
 	return /[\\/]/.test(arg) || /\.\w{1,10}$/.test(arg);
 }
 
+/**
+ * File-based script runners из denylist всё же разрешены:
+ * - pwsh/powershell -File script.ps1 (не -Command)
+ * - bash/sh script.sh без -c/-e
+ */
+export function isAllowedScriptFileInvocation(binary: string, args: string[]): boolean {
+	const b = binary.toLowerCase();
+	if (b === 'pwsh' || b === 'powershell') {
+		const hasInline = args.some((a) => /^-(?:[Cc]ommand|EncodedCommand|e)$/i.test(a) || a === '-c');
+		if (hasInline) {
+			return false;
+		}
+
+		for (let i = 0; i < args.length; i += 1) {
+			if (/^-(?:[Ff]ile|f)$/i.test(args[i]!)) {
+				const next = args[i + 1];
+				return Boolean(next && looksLikeFileOperand(next));
+			}
+		}
+
+		return false;
+	}
+
+	if (b === 'bash' || b === 'sh' || b === 'zsh' || b === 'dash') {
+		if (args.some((a) => a === '-c' || a === '-e' || a === '--eval')) {
+			return false;
+		}
+
+		const file = args.find((a) => !a.startsWith('-'));
+		return Boolean(file && looksLikeFileOperand(file));
+	}
+
+	return false;
+}
+
 function isDeniedCFlag(binary: string, args: string[], index: number): boolean {
 	if (!C_FLAGS.has(args[index])) {
 		return false;
@@ -92,7 +127,12 @@ function gitSubcommand(args: string[]): string | undefined {
 	return undefined;
 }
 
-export function assertAllowedCommand(command: string, args: string[], deniedCommands?: readonly string[]): void {
+export function assertAllowedCommand(
+	command: string,
+	args: string[],
+	deniedCommands?: readonly string[],
+	opts?: { allowDeniedBinary?: boolean },
+): void {
 	const trimmed = command.trim();
 	if (!trimmed) {
 		throw new CommandPolicyError(vscode.l10n.t('cmd.empty'));
@@ -107,7 +147,8 @@ export function assertAllowedCommand(command: string, args: string[], deniedComm
 		throw new CommandPolicyError(vscode.l10n.t('cmd.empty'));
 	}
 
-	if (deniedBinarySet(deniedCommands).has(binary)) {
+	const denied = deniedBinarySet(deniedCommands).has(binary);
+	if (denied && !opts?.allowDeniedBinary && !isAllowedScriptFileInvocation(binary, args)) {
 		throw new CommandPolicyError(vscode.l10n.t('cmd.deniedBinary', binary));
 	}
 
@@ -119,6 +160,11 @@ export function assertAllowedCommand(command: string, args: string[], deniedComm
 
 		if (arg.includes('\0')) {
 			throw new CommandPolicyError(vscode.l10n.t('cmd.badArgChar'));
+		}
+
+		// PowerShell -Command / -EncodedCommand = inline eval
+		if ((binary === 'pwsh' || binary === 'powershell') && (/^-(?:[Cc]ommand|EncodedCommand)$/i.test(arg) || arg === '-c')) {
+			throw new CommandPolicyError(vscode.l10n.t('cmd.evalFlag', arg));
 		}
 
 		if (EVAL_FLAGS.has(arg) || isDeniedCFlag(binary, args, i)) {

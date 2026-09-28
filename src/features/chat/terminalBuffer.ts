@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { stripAnsi } from '../agent/ansi';
 
 // Сколько символов держим на терминал в ring-буфере
 const MAX_BUFFER_CHARS = 8_000;
@@ -42,21 +43,7 @@ function getOrCreate(key: string): TerminalBufferEntry {
 	return entry;
 }
 
-// Убрать ANSI / OSC escape-последовательности из вывода терминала
-export function stripAnsi(raw: string): string {
-	if (!raw) {
-		return '';
-	}
-
-	return raw
-		// OSC (operating system command) sequences ... BEL or ST
-		.replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, '')
-		// CSI sequences
-		.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
-		// Remaining ESC + final byte
-		.replace(/\u001b[@-Z\\-_]/g, '')
-		.replace(/\r/g, '');
-}
+export { stripAnsi } from '../agent/ansi';
 
 function append(key: string, data: string): void {
 	const cleaned = stripAnsi(data);

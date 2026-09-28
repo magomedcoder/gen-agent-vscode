@@ -4,6 +4,7 @@ import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type To
 import { resolveCommandCwd, throwIfAborted } from '../../workspacePath';
 import { runShellCommand, formatPartialShellPreview } from '../../shellExec';
 import { confirmAlwaysOrSkip } from '../confirm';
+import { getShellProfileEnv } from '../../../project/shellProfiles';
 
 export const runTestsTool: ToolDefinition = {
 	name: 'run_tests',
@@ -18,6 +19,10 @@ export const runTestsTool: ToolDefinition = {
 			timeout_ms: {
 				type: 'integer',
 				description: 'Таймаут в миллисекундах (по умолчанию 120000, максимум 300000)',
+			},
+			profile: {
+				type: 'string',
+				description: 'Имя профиля из `.gen/shell.json`',
 			},
 		},
 		additionalProperties: false,
@@ -43,6 +48,17 @@ export const runTestsTool: ToolDefinition = {
 			};
 		}
 
+		const profileEnv = await getShellProfileEnv({
+			profileName: asString(args, 'profile', ''),
+		});
+		if (profileEnv.error) {
+			return {
+				ok: false,
+				path: resolved.relative,
+				content: `shell profile: ${profileEnv.error}`,
+			};
+		}
+
 		const commandLine = `${detected.command} ${detected.args.join(' ')}`.trim();
 		const result = await runShellCommand({
 			command: detected.command,
@@ -50,6 +66,7 @@ export const runTestsTool: ToolDefinition = {
 			cwd,
 			timeoutMs: asOptionalInt(args, 'timeout_ms') ?? 120_000,
 			signal: ctx.signal,
+			env: profileEnv.env,
 			onPartialOutput: ctx.onPartialOutput
 				? (raw) => {
 					ctx.onPartialOutput!(`${detected.label}\n${formatPartialShellPreview({ commandLine, cwd, raw })}`);

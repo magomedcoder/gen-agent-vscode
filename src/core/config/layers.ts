@@ -104,6 +104,7 @@ export const FILE_LAYER_KEYS = [
 	'chatViewLocation',
 	'maxTabCount',
 	'maxConcurrentRuns',
+	'tabEvictionPolicy',
 ] as const satisfies readonly (keyof GenSettings)[];
 
 export type FileLayerKey = (typeof FILE_LAYER_KEYS)[number];

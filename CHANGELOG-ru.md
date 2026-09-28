@@ -26,6 +26,10 @@
 - **Субагенты:** `task` `background` / interrupt / resume; fan-out `prompts[]`; `allow_mutating_parallel` для mutating parallel (worktree на job); scout/explore `cleanup_worktree` + bulk cleanup в Teams
 - **Project:** `synthesize` пишет aggregate-отчёты в `.gen/reports/`
 - **Debug:** живой захват терминала через Shell Integration (`onDidStartTerminalShellExecution` + meta cmd/exit); ANSI срезается; в Debug Mode хвосты терминалов подмешиваются сами (если нет явного `@terminals`); `@terminals` выше ранжирует ненулевой exit
+- **Shell / PowerShell:** `run_scratch` умеет `.ps1` через `pwsh -File` (fallback `powershell`); file-based `pwsh`/`bash` разрешены даже из `deniedCommands`; `-Command`/`-c` по-прежнему запрещены; на Windows worktree start предпочитает `pwsh` (fallback `cmd.exe`)
+- **Shell / notify_on_output:** матч только по **новому** выводу job (без false positive на старый буфер); ANSI срезается; busyDetail/partial preview при watching / MATCH
+- **Shell / profiles:** `.gen/shell.json` - env templates и named profiles (`pathPrepend`/`pathAppend`); применяются в `run_command` / `run_tests` / `run_scratch` до хука `shell.env`; выбор: tool `profile`, `GEN_SHELL_PROFILE` или `defaultProfile`
+- **Sessions:** `tabEvictionPolicy` (`closeOldestIdle` по умолчанию / `block`) - на лимите `maxTabCount` new/fork/handoff закрывает самые старые idle (не current и не busy)
 
 ## 0.4.0 (11 сентября 2026)
 

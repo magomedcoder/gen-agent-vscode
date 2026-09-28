@@ -250,6 +250,19 @@ suite('commandPolicy', () => {
 		);
 	});
 
+	test('pwsh/bash: -File / script.sh разрешены даже из denylist; -Command/-c запрещены', () => {
+		assert.doesNotThrow(() => assertAllowedCommand('pwsh', ['-NoProfile', '-File', 'run.ps1'], ['pwsh']));
+		assert.throws(
+			() => assertAllowedCommand('pwsh', ['-Command', 'Write-Host 1'], ['pwsh']),
+			(err: unknown) => err instanceof CommandPolicyError,
+		);
+		assert.doesNotThrow(() => assertAllowedCommand('bash', ['script.sh'], ['bash']));
+		assert.throws(
+			() => assertAllowedCommand('bash', ['-c', 'echo 1'], ['bash']),
+			(err: unknown) => err instanceof CommandPolicyError,
+		);
+	});
+
 	test('gcc -c файл можно, python -c код нельзя', () => {
 		assert.doesNotThrow(() => assertAllowedCommand('gcc', ['-c', 'foo.c']));
 		assert.doesNotThrow(() => assertAllowedCommand('tar', ['-c', '-f', 'out.tar', 'src']));

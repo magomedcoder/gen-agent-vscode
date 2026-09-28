@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { getSettings } from '../../core/config/settings';
 import { GEN_DIR_RELATIVE } from '../project/config';
 import { AGENT_LIMITS, previewText } from './policy';
+import { resolveHostShellInvoker } from './scriptRunner';
 import { defaultWorkspaceCwd } from './shellSession';
 
 const execFileAsync = promisify(execFile);
@@ -64,7 +65,8 @@ export function slugifyWorktreeId(raw: string): string {
 }
 
 /**
- * Запустить `worktreeStartCommand` один раз в cwd worktree (как hooks: /bin/sh -c).
+ * Запустить `worktreeStartCommand` один раз в cwd worktree.
+ * Unix: /bin/sh -c; Windows: pwsh -Command (fallback cmd.exe).
  * Ошибка не бросается - возвращает ok/detail.
  */
 export async function runWorktreeStartCommand(
@@ -77,16 +79,14 @@ export async function runWorktreeStartCommand(
 		return { ok: true, detail: '' };
 	}
 
-	const isWin = process.platform === 'win32';
-	const shell = isWin ? 'cmd.exe' : '/bin/sh';
-	const args = isWin ? ['/d', '/s', '/c', trimmed] : ['-c', trimmed];
+	const invoker = resolveHostShellInvoker();
 	const timeoutMs = Math.min(
 		getSettings().maxToolTimeoutMs || AGENT_LIMITS.maxCommandTimeoutMs,
 		300_000,
 	);
 
-	try {
-		const { stdout, stderr } = await execFileAsync(shell, args, {
+	const tryOnce = async (commandBin: string, args: string[]) => {
+		const { stdout, stderr } = await execFileAsync(commandBin, args, {
 			cwd,
 			timeout: timeoutMs,
 			maxBuffer: AGENT_LIMITS.maxCommandOutput,
@@ -103,7 +103,11 @@ export async function runWorktreeStartCommand(
 				.join('\n'),
 			AGENT_LIMITS.maxCommandOutput,
 		);
-		return { ok: true, detail: out };
+		return { ok: true as const, detail: out };
+	};
+
+	try {
+		return await tryOnce(invoker.command, invoker.argsFor(trimmed));
 	} catch (err) {
 		const execErr = err as NodeJS.ErrnoException & {
 			stdout?: string;
@@ -116,6 +120,39 @@ export async function runWorktreeStartCommand(
 			throw abortErr;
 		}
 
+		if (execErr.code === 'ENOENT' && invoker.fallback) {
+			try {
+				return await tryOnce(invoker.fallback.command, invoker.fallback.argsFor(trimmed));
+			} catch (err2) {
+				const execErr2 = err2 as NodeJS.ErrnoException & {
+					stdout?: string;
+					stderr?: string;
+					code?: number | string;
+				};
+				if (execErr2.name === 'AbortError' || signal?.aborted) {
+					const abortErr = new Error(vscode.l10n.t('agent.operationCancelled'));
+					abortErr.name = 'AbortError';
+					throw abortErr;
+				}
+
+				const exit = typeof execErr2.code === 'number' ? execErr2.code : 1;
+				const out = previewText(
+					[
+						`$ ${trimmed}`,
+						`cwd: ${cwd}`,
+						`exit: ${exit}`,
+						String(execErr2.stdout ?? ''),
+						String(execErr2.stderr ?? (execErr2 instanceof Error ? execErr2.message : String(execErr2))),
+					].filter((l) => String(l).trim()).join('\n'),
+					AGENT_LIMITS.maxCommandOutput,
+				);
+				return {
+					ok: false,
+					detail: out
+				};
+			}
+		}
+
 		const exit = typeof execErr.code === 'number' ? execErr.code : 1;
 		const out = previewText(
 			[
@@ -123,16 +160,13 @@ export async function runWorktreeStartCommand(
 				`cwd: ${cwd}`,
 				`exit: ${exit}`,
 				String(execErr.stdout ?? ''),
-				String(execErr.stderr ?? execErr.message ?? err),
+				String(execErr.stderr ?? (execErr instanceof Error ? execErr.message : String(execErr))),
 			]
 				.filter((l) => String(l).trim())
 				.join('\n'),
 			AGENT_LIMITS.maxCommandOutput,
 		);
-		return { 
-			ok: false, 
-			detail: out 
-		};
+		return { ok: false, detail: out };
 	}
 }
 

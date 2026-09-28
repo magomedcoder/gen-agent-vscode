@@ -27,6 +27,10 @@
 - **Subagents:** `task` `background` / interrupt / resume; `prompts[]` fan-out; `allow_mutating_parallel` for mutating parallel (per-job worktree); scout/explore `cleanup_worktree` + Teams bulk cleanup
 - **Project:** `synthesize` writes aggregate reports under `.gen/reports/`
 - **Debug:** live terminal capture via Shell Integration (`onDidStartTerminalShellExecution` stream + exit/cmd meta); ANSI stripped; Debug Mode auto-injects terminal tails (unless `@terminals` already present); `@terminals` ranks failed exits higher
+- **Shell / PowerShell:** `run_scratch` supports `.ps1` via `pwsh -File` (fallback `powershell`); file-based `pwsh`/`bash` script invoke allowed even when binary is in `deniedCommands`; `-Command`/`-c` still blocked; Windows worktree start prefers `pwsh` (fallback `cmd.exe`)
+- **Shell / notify_on_output:** match only **new** job output (no false positive on prior buffer); ANSI stripped; busyDetail/partial preview while watching / on MATCH
+- **Shell / profiles:** `.gen/shell.json` env templates + named profiles (`pathPrepend`/`pathAppend`); applied on `run_command` / `run_tests` / `run_scratch` before `shell.env` hook; select via tool `profile`, `GEN_SHELL_PROFILE`, or `defaultProfile`
+- **Sessions:** `tabEvictionPolicy` (`closeOldestIdle` default / `block`) - at `maxTabCount`, new/fork/handoff closes oldest idle tabs (never current or busy)
 
 ## 0.4.0 (11 September 2026)
 

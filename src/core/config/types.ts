@@ -21,6 +21,8 @@ export type WebSearchBackend = 'duckduckgo' | 'exa' | 'parallel' | 'http';
  * `deny` - shell tools скрыты (как раньше). Правки в Plan всегда запрещены.
  */
 export type PlanShellPolicy = 'deny' | 'ask';
+// При лимите вкладок: блокировать new / закрывать самые старые idle
+export type TabEvictionPolicy = 'block' | 'closeOldestIdle';
 /**
  * Политика `provider.use`:
  * - `allow` - allowlist (пустой список = всё разрешено; иначе нужен match)
@@ -541,6 +543,12 @@ export interface GenSettings {
 	 * min - 1, max - 10, default - 3
 	 */
 	maxConcurrentRuns: number;
+	/**
+	 * Что делать при new/fork/handoff, если вкладок уже maxTabCount.
+	 * block - предупреждение; closeOldestIdle - закрыть самые старые idle (не current, не busy).
+	 * default - closeOldestIdle
+	 */
+	tabEvictionPolicy: TabEvictionPolicy;
 }
 
 // Примеры для кнопки в Security settings - не подставляются в deniedPaths автоматически
@@ -651,4 +659,5 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	chatViewLocation: 'both',
 	maxTabCount: 10,
 	maxConcurrentRuns: 3,
+	tabEvictionPolicy: 'closeOldestIdle',
 };

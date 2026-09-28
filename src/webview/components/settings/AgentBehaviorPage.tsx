@@ -1,4 +1,4 @@
-import type { PlanShellPolicy, RevealOnEdit, ShareMode } from '../../../core/config/types';
+import type { PlanShellPolicy, RevealOnEdit, ShareMode, TabEvictionPolicy } from '../../../core/config/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 import { parseNumberInput } from './parseNumber';
@@ -49,6 +49,15 @@ export function AgentBehaviorPage({ draft, setField }: SettingsPageProps) {
 					parse={parseNumberInput}
 					onChange={(v) => setField('maxConcurrentRuns', v)}
 				/>
+				<FieldSelect
+					labelKey="settings.tabEvictionPolicy.label"
+					hintKey="settings.tabEvictionPolicy.hint"
+					value={draft.tabEvictionPolicy}
+					onChange={(v) => setField('tabEvictionPolicy', v as TabEvictionPolicy)}
+				>
+					<option value="closeOldestIdle">{t('settings.tabEvictionPolicy.closeOldestIdle')}</option>
+					<option value="block">{t('settings.tabEvictionPolicy.block')}</option>
+				</FieldSelect>
 			</SettingsSection>
 
 			<SettingsSection titleKey="settings.section.agent.plan" defaultOpen={false}>

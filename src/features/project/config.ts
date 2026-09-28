@@ -29,7 +29,7 @@ Project files for Gen / файлы проекта Gen.
 | \`map/\` | Project module map cache (\`project.json\`) | Кэш карты модулей |
 | \`scratch/\` | Ephemeral scripts (\`run_scratch\`) | Одноразовые скрипты |
 
-Also: \`config.json\` (opt-in), \`hooks.json\`, \`references.json\` (on demand), \`index/\`, \`plan.md\`.
+Also: \`config.json\` (opt-in), \`hooks.json\`, \`shell.json\` (env profiles), \`references.json\` (on demand), \`index/\`, \`plan.md\`.
 `;
 
 /**

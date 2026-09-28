@@ -1,0 +1,78 @@
+{
+	"$schema": "https://json-schema.org/draft-07/schema#",
+	"$id": "https://raw.githubusercontent.com/magomedcoder/gen-agent-vscode/main/schemas/gen-shell.schema.json",
+	"title": "Gen Agent shell profiles",
+	"description": "Workspace shell env templates (`.gen/shell.json`). Applied before spawn for run_command / run_tests / run_scratch. Order: profile env -> shell.env hook. Select profile via tool `profile`, env GEN_SHELL_PROFILE, or defaultProfile.",
+	"type": "object",
+	"properties": {
+		"$schema": {
+			"type": "string"
+		},
+		"version": {
+			"type": "integer",
+			"minimum": 1,
+			"default": 1
+		},
+		"defaultProfile": {
+			"type": "string",
+			"description": "Имя профиля по умолчанию (если не заданы tool profile / GEN_SHELL_PROFILE)."
+		},
+		"description": {
+			"type": "string",
+			"description": "Описание shorthand-профиля (без named profiles)."
+		},
+		"env": {
+			"$ref": "#/$defs/envMap",
+			"description": "Shorthand: env без named profiles -> профиль `default`."
+		},
+		"pathPrepend": {
+			"$ref": "#/$defs/pathList",
+			"description": "Shorthand PATH prepend (относительные - от корня workspace)."
+		},
+		"pathAppend": {
+			"$ref": "#/$defs/pathList",
+			"description": "Shorthand PATH append."
+		},
+		"profiles": {
+			"type": "object",
+			"additionalProperties": {
+				"$ref": "#/$defs/profile"
+			},
+			"description": "Именованные профили (dev, ci, ...)."
+		}
+	},
+	"additionalProperties": false,
+	"$defs": {
+		"envMap": {
+			"type": "object",
+			"additionalProperties": {
+				"type": ["string", "number", "boolean"]
+			}
+		},
+		"pathList": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"minLength": 1
+			}
+		},
+		"profile": {
+			"type": "object",
+			"properties": {
+				"description": {
+					"type": "string"
+				},
+				"env": {
+					"$ref": "#/$defs/envMap"
+				},
+				"pathPrepend": {
+					"$ref": "#/$defs/pathList"
+				},
+				"pathAppend": {
+					"$ref": "#/$defs/pathList"
+				}
+			},
+			"additionalProperties": false
+		}
+	}
+}

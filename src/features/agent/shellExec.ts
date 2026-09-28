@@ -17,6 +17,8 @@ export interface ShellExecRequest {
 	 * Вызывается с накопленным сырым текстом (уже capped).
 	 */
 	onPartialOutput?: (accumulatedRaw: string) => void;
+	// Trusted script runner (run_scratch): бинарь из denylist разрешён
+	allowDeniedBinary?: boolean;
 }
 
 export interface ShellExecResult {
@@ -86,7 +88,9 @@ export function formatPartialShellPreview(params: {
 
 export async function runShellCommand(request: ShellExecRequest): Promise<ShellExecResult> {
 	const args = request.args ?? [];
-	assertAllowedCommand(request.command, args);
+	assertAllowedCommand(request.command, args, undefined, {
+		allowDeniedBinary: request.allowDeniedBinary,
+	});
 
 	const commandLine = formatCommandLine(request.command, args);
 	const timeout = clampTimeout(request.timeoutMs);
