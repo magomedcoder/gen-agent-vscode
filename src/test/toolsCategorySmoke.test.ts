@@ -26,7 +26,6 @@ suite('tools category smoke', () => {
 			['search', 'glob'],
 			['shell', 'run_command'],
 			['ide', 'get_active_editor'],
-			['mcp', 'list_mcp_tools'],
 			['plan', 'plan_enter'],
 			['meta', 'get_workspace_info'],
 		];
@@ -76,14 +75,6 @@ suite('tools category smoke', () => {
 		const result = await tool.execute({}, {});
 		assert.strictEqual(result.ok, true, result.content);
 		assert.ok(result.content.includes('editor'));
-	});
-
-	test('mcp: list_mcp_tools', async () => {
-		assertTagged('list_mcp_tools', 'mcp', 'mcp');
-		const tool = getToolByName('list_mcp_tools')!;
-		const result = await tool.execute({}, {});
-		assert.strictEqual(result.ok, true, result.content);
-		assert.ok(result.content.includes('tools'));
 	});
 
 	test('plan: plan_enter с mock setChatMode', async () => {

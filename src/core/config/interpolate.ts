@@ -13,7 +13,7 @@ export interface InterpolateConfigStringOpts {
 }
 
 /**
- * Подставляет плейсхолдеры в строках MCP/конфига:
+ * Подставляет плейсхолдеры в строках конфига:
  * `${env:NAME}` / `{env:NAME}` * process.env[NAME] или '' (без throw);
  * `{file:path}` * содержимое файла (utf8), относительно workspace/cwd, с лимитом размера.
  */

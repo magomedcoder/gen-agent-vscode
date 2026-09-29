@@ -13,7 +13,6 @@ suite('eval/permissions-confirm', () => {
 		assert.strictEqual(toolActionType('write_file'), 'edits');
 		assert.strictEqual(toolActionType('apply_patch'), 'edits');
 		assert.strictEqual(toolActionType('run_command'), 'shell');
-		assert.strictEqual(toolActionType('call_mcp_tool'), 'mcp');
 		assert.strictEqual(toolActionType('web_search'), 'web');
 		assert.strictEqual(toolActionType('delete_file'), 'delete');
 		assert.strictEqual(toolActionType('read_file'), undefined);
@@ -123,10 +122,6 @@ suite('eval/permissions-confirm', () => {
 		assert.strictEqual(
 			suggestPattern('web', 'web_search', 'https://api.example.com/v1'),
 			'https://api.example.com/*',
-		);
-		assert.strictEqual(
-			suggestPattern('mcp', 'call_mcp_tool', 'server/tool'),
-			'mcp:server*',
 		);
 
 		const merged = mergeAlwaysAllow(['npm*', 'git*'], ['git*', 'curl*']);

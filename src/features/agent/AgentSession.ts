@@ -792,7 +792,7 @@ export class AgentSession {
 					call.function.arguments,
 					toolPathHint,
 				);
-				// Старт только для заметных действий (shell / mcp / edit) - без шума от read/grep
+				// Старт только для заметных действий (shell / edit) - без шума от read/grep
 				if (toolKind !== 'tool') {
 					recordActivity({
 						kind: toolKind,

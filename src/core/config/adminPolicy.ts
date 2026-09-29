@@ -12,7 +12,6 @@ import { DEFAULT_SETTINGS } from './types';
  * 3. Windows: `%ProgramData%/gen/policy.json`
  *
  * Ключи из файла принудительно перекрывают user / UI / project.
- * Опционально `mcpServersAllowlist` - фильтр имён MCP после merge.
  */
 
 // Ключи GenSettings, которые admin policy может заблокировать / форсировать
@@ -28,7 +27,6 @@ export const ADMIN_POLICY_KEYS = [
 	'allowExternalDirectory',
 	'otelEnabled',
 	'otelEndpoint',
-	'mcpServers',
 	'providerUsePolicy',
 	'providerUsePatterns',
 ] as const satisfies readonly (keyof GenSettings)[];
@@ -37,7 +35,7 @@ export type AdminPolicyKey = (typeof ADMIN_POLICY_KEYS)[number];
 
 const ADMIN_POLICY_KEY_SET = new Set<string>(ADMIN_POLICY_KEYS);
 
-const META_KEYS = new Set(['$schema', 'version', 'description', 'mcpServersAllowlist']);
+const META_KEYS = new Set(['$schema', 'version', 'description']);
 
 export interface AdminPolicySnapshot {
 	// Файл найден и распарсен (даже если lockedKeys пуст - policy «пустой»)
@@ -46,9 +44,7 @@ export interface AdminPolicySnapshot {
 	path?: string;
 	// Overlay GenSettings (только ADMIN_POLICY_KEYS)
 	settings: Partial<GenSettings>;
-	// Паттерны allowlist имён MCP (если заданы в policy)
-	mcpServersAllowlist?: string[];
-	// Имена заблокированных ключей (+ mcpServersAllowlist при наличии)
+	// Имена заблокированных ключей
 	lockedKeys: string[];
 }
 
@@ -79,7 +75,7 @@ export function resolveAdminPolicyCandidates(): string[] {
 	return [path.join('/etc', 'gen', 'policy.json')];
 }
 
-// Простой glob-like match для имён MCP (`*`, prefix*, *suffix)
+// Простой glob-like match (`*`, prefix*, *suffix)
 export function matchAdminPattern(pattern: string, subject: string): boolean {
 	const p = pattern.trim();
 	const s = subject.trim();
@@ -108,7 +104,6 @@ export function matchAdminPattern(pattern: string, subject: string): boolean {
 
 export function parseAdminPolicy(raw: unknown): {
 	settings: Partial<GenSettings>;
-	mcpServersAllowlist?: string[];
 	lockedKeys: string[];
 } {
 	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -135,23 +130,9 @@ export function parseAdminPolicy(raw: unknown): {
 		lockedKeys.push(key);
 	}
 
-	let mcpServersAllowlist: string[] | undefined;
-	const allowRaw = obj.mcpServersAllowlist;
-	if (Array.isArray(allowRaw)) {
-		mcpServersAllowlist = allowRaw.map((item) => String(item).trim())
-			.filter(Boolean)
-			.slice(0, 80);
-		if (mcpServersAllowlist.length > 0) {
-			lockedKeys.push('mcpServersAllowlist');
-		} else {
-			mcpServersAllowlist = undefined;
-		}
-	}
-
 	lockedKeys.sort();
 	return {
 		settings,
-		mcpServersAllowlist,
 		lockedKeys
 	};
 }
@@ -181,27 +162,16 @@ export function isAdminPolicyActive(): boolean {
 
 /**
  * Применить admin overlay к уже смерженным settings (после user/UI/project).
- * Также фильтрует mcpServers по allowlist.
  */
 export function applyAdminPolicy(merged: Partial<GenSettings>): Partial<GenSettings> {
 	if (!snapshot.active || snapshot.lockedKeys.length === 0) {
 		return merged;
 	}
 
-	const out: Partial<GenSettings> = { 
-		...merged, 
+	return {
+		...merged,
 		...snapshot.settings
 	};
-
-	const allow = snapshot.mcpServersAllowlist;
-	if (allow && allow.length > 0) {
-		const servers = Array.isArray(out.mcpServers) ? out.mcpServers : [];
-		out.mcpServers = servers.filter((s) =>
-			allow.some((pat) => matchAdminPattern(pat, s.name)),
-		);
-	}
-
-	return out;
 }
 
 // Перед записью в UI globalState: locked-ключи сбрасываем к defaults, чтобы после снятия политики в store не остались «зашитые» значения
@@ -248,7 +218,6 @@ export async function reloadAdminPolicy(): Promise<AdminPolicySnapshot> {
 			active: true,
 			path: candidate,
 			settings: parsed.settings,
-			mcpServersAllowlist: parsed.mcpServersAllowlist,
 			lockedKeys: parsed.lockedKeys,
 		};
 		return snapshot;

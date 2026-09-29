@@ -67,19 +67,19 @@ export function AgentsPage({
 			{(agents?.presets ?? []).length === 0 ? (
 				<span className="field__hint">{t('settings.agents.presets.empty')}</span>
 			) : (
-				<div className="mcp-list">
+				<div className="settings-list">
 					{(agents?.presets ?? []).map((preset) => (
-						<div key={preset.id} className="mcp-card">
-							<div className="mcp-card__header">
-								<div className="mcp-card__title-row">
-									<span className="mcp-card__name">{preset.name}</span>
+						<div key={preset.id} className="settings-card">
+							<div className="settings-card__header">
+								<div className="settings-card__title-row">
+									<span className="settings-card__name">{preset.name}</span>
 									{preset.readonly ? (
-										<span className="mcp-card__badge mcp-card__badge--muted">
+										<span className="settings-card__badge settings-card__badge--muted">
 											{t('settings.agents.readonly')}
 										</span>
 									) : null}
 									{preset.mode ? (
-										<span className="mcp-card__badge">{preset.mode}</span>
+										<span className="settings-card__badge">{preset.mode}</span>
 									) : null}
 								</div>
 								<button
@@ -90,7 +90,7 @@ export function AgentsPage({
 									{t('settings.agents.clone')}
 								</button>
 							</div>
-							<span className="mcp-card__command">{preset.description}</span>
+							<span className="settings-card__command">{preset.description}</span>
 						</div>
 					))}
 				</div>
@@ -101,20 +101,20 @@ export function AgentsPage({
 			{(agents?.custom ?? []).length === 0 ? (
 				<span className="field__hint">{t('settings.agents.custom.empty')}</span>
 			) : (
-				<div className="mcp-list">
+				<div className="settings-list">
 					{(agents?.custom ?? []).map((agent) => (
-						<div key={agent.id} className="mcp-card">
-							<div className="mcp-card__header">
-								<div className="mcp-card__title-row">
-									<span className="mcp-card__name">{agent.name}</span>
+						<div key={agent.id} className="settings-card">
+							<div className="settings-card__header">
+								<div className="settings-card__title-row">
+									<span className="settings-card__name">{agent.name}</span>
 									{agent.readonly ? (
-										<span className="mcp-card__badge mcp-card__badge--muted">
+										<span className="settings-card__badge settings-card__badge--muted">
 											{t('settings.agents.readonly')}
 										</span>
 									) : null}
 								</div>
 							</div>
-							<span className="mcp-card__command">{agent.description}</span>
+							<span className="settings-card__command">{agent.description}</span>
 						</div>
 					))}
 				</div>

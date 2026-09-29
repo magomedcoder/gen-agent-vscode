@@ -2,7 +2,7 @@
 	"$schema": "https://json-schema.org/draft-07/schema#",
 	"$id": "https://raw.githubusercontent.com/magomedcoder/gen-agent-vscode/main/schemas/gen-config.schema.json",
 	"title": "Gen Agent config",
-	"description": "User (`~/.config/gen/config.json`) or project (`.gen/config.json`) layer. Only keys listed in FILE_LAYER_KEYS plus hooks/hooksPath/meta are applied. Strings may use `${env:VAR}` / `{env:VAR}` and `{file:path}` interpolation where supported (e.g. MCP spawn).",
+	"description": "User (`~/.config/gen/config.json`) or project (`.gen/config.json`) layer. Only keys listed in FILE_LAYER_KEYS plus hooks/hooksPath/meta are applied. Strings may use `${env:VAR}` / `{env:VAR}` and `{file:path}` interpolation where supported.",
 	"type": "object",
 	"properties": {
 		"$schema": {
@@ -27,70 +27,6 @@
 		},
 		"systemPrompt": { "type": "string" },
 		"commentSystemPrompt": { "type": "string" },
-		"mcpServers": {
-			"type": "array",
-			"items": {
-				"type": "object",
-				"required": ["name", "command", "enabled"],
-				"properties": {
-					"name": { 
-						"type": "string", 
-						"minLength": 1 
-					},
-					"transport": { 
-						"type": "string",
-						 "const": "stdio" 
-						},
-					"command": { "type": "string", "minLength": 1 },
-					"args": {
-						"type": "array",
-						"items": { "type": "string" }
-					},
-					"env": {
-						"type": "object",
-						"additionalProperties": { "type": "string" }
-					},
-					"headers": {
-						"type": "object",
-						"additionalProperties": { "type": "string" },
-						"description": "stdio * GEN_MCP_HEADER_*; future HTTP transport as headers."
-					},
-					"cwd": { "type": "string" },
-					"timeoutMs": { "type": "integer", "minimum": 0 },
-					"enabled": { "type": "boolean" },
-					"oauth": {
-						"type": "boolean",
-						"description": "If true, enable MCP OAuth (paste token / PKCE code exchange). Default false."
-					},
-					"mcpOAuthIssuer": {
-						"type": "string",
-						"description": "Optional OAuth/OIDC issuer for discovery (/.well-known/openid-configuration or oauth-authorization-server)."
-					},
-					"mcpOAuthClientId": {
-						"type": "string",
-						"description": "OAuth client_id for PKCE (default gen-agent-vscode)."
-					},
-					"mcpOAuthAuthorizeUrl": {
-						"type": "string",
-						"description": "Optional http(s) authorize URL; PKCE code_challenge appended on Auth."
-					},
-					"mcpOAuthTokenUrl": {
-						"type": "string",
-						"description": "Optional token URL for authorization_code / refresh_token (POST form-urlencoded)."
-					}
-				},
-				"additionalProperties": true
-			}
-		},
-		"codeModeEnabled": {
-			"type": "boolean",
-			"description": "Experimental: enable execute/code-mode (JSON steps * MCP tools only; no host JS eval). Default false."
-		},
-		"mcpToolResultMaxChars": {
-			"type": "integer",
-			"minimum": 500,
-			"description": "Max chars of MCP tool results returned to the model (default 50000)"
-		},
 		"primaryTools": {
 			"type": "array",
 			"items": { "type": "string" },
@@ -184,7 +120,6 @@
 				"shell": { "$ref": "#/$defs/approvalRule" },
 				"edits": { "$ref": "#/$defs/approvalRule" },
 				"delete": { "$ref": "#/$defs/approvalRule" },
-				"mcp": { "$ref": "#/$defs/approvalRule" },
 				"web": { "$ref": "#/$defs/approvalRule" },
 				"outside": { "$ref": "#/$defs/approvalRule" },
 				"task": { "$ref": "#/$defs/approvalRule" },

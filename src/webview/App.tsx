@@ -77,7 +77,6 @@ export function App() {
 		modelsLoading,
 		connectionHealth,
 		connectionHealthLoading,
-		mcpServers,
 		indexStatus,
 		hooks,
 		hooksStatus,
@@ -88,12 +87,6 @@ export function App() {
 		loadModels,
 		checkConnection,
 		openLogsFolder,
-		refreshMcp,
-		reconnectMcp,
-		refreshMcpTools,
-		mcpOAuthAuth,
-		mcpOAuthLogout,
-		mcpOAuthDebug,
 		loadIndexStatus,
 		cancelIndex,
 		repairIndex,
@@ -143,7 +136,6 @@ export function App() {
 				modelsLoading={modelsLoading}
 				connectionHealth={connectionHealth}
 				connectionHealthLoading={connectionHealthLoading}
-				mcpServers={mcpServers}
 				indexStatus={indexStatus}
 				hooks={hooks}
 				hooksStatus={hooksStatus}
@@ -154,12 +146,6 @@ export function App() {
 				onLoadModels={loadModels}
 				onCheckConnection={checkConnection}
 				onOpenLogsFolder={openLogsFolder}
-				onRefreshMcp={refreshMcp}
-				onReconnectMcp={reconnectMcp}
-				onRefreshMcpTools={refreshMcpTools}
-				onMcpOAuthAuth={mcpOAuthAuth}
-				onMcpOAuthLogout={mcpOAuthLogout}
-				onMcpOAuthDebug={mcpOAuthDebug}
 				onLoadIndexStatus={loadIndexStatus}
 				onCancelIndex={cancelIndex}
 				onRepairIndex={repairIndex}

@@ -29,7 +29,7 @@
 | `deny`        | Блок; причина модели                                                                                          |
 | `autoApprove` | `ask` -> allow; **deny остаётся deny**                                                                        |
 
-Действия: `shell`, `edits`, `delete`, `mcp`, `web`, `outside`, `task`, `skill`. Capability-флаги - грубые выключатели поверх матрицы.
+Действия: `shell`, `edits`, `delete`, `web`, `outside`, `task`, `skill`. Capability-флаги - грубые выключатели поверх матрицы.
 
 ## UI чата
 

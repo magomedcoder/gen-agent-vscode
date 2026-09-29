@@ -7,7 +7,6 @@ import { initFileWatcherHooks } from '../features/project/fileWatcherHooks';
 import { initGenRulesManager } from '../features/project/genrules';
 import { initActivityStore } from '../core/stores/activityStore';
 import { initUsageStore } from '../core/stores/usageStore';
-import { registerMcpOAuthUriHandler } from '../integrations/mcpOAuthUriHandler';
 import { registerHostCommands } from './commands';
 import { registerHostProviders } from './providers';
 
@@ -26,7 +25,6 @@ export function activate(context: vscode.ExtensionContext): void {
 		...providerDisposables,
 		...registerHostCommands(diffProvider),
 		registerChat(context),
-		registerMcpOAuthUriHandler(context),
 	);
 }
 

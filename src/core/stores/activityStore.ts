@@ -2,7 +2,7 @@ import type { ExtensionContext, Memento } from 'vscode';
 import { isMutatingTool } from '../../features/agent/auth';
 
 // Вид действия в Activity ledger (вне message history)
-export type ActivityKind = 'tool' | 'edit' | 'shell' | 'mcp' | 'review';
+export type ActivityKind = 'tool' | 'edit' | 'shell' | 'review';
 
 export interface ActivityEntry {
 	id: string;
@@ -23,7 +23,6 @@ const STORAGE_KEY = 'gen.activity.entries';
 const MAX_ENTRIES = 200;
 
 const SHELL_TOOLS = new Set(['run_command', 'run_tests', 'await_shell', 'run_scratch']);
-const MCP_TOOLS = new Set(['call_mcp_tool', 'execute', 'fetch_mcp_resource', 'list_mcp_resources', 'list_mcp_tools']);
 
 let store: Memento | undefined;
 let entries: ActivityEntry[] = [];
@@ -46,10 +45,6 @@ function persist(): void {
 export function activityKindFromTool(name: string): ActivityKind {
 	if (SHELL_TOOLS.has(name)) {
 		return 'shell';
-	}
-
-	if (MCP_TOOLS.has(name)) {
-		return 'mcp';
 	}
 
 	if (isMutatingTool(name)) {

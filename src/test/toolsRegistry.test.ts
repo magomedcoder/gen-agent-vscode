@@ -77,6 +77,6 @@ suite('tools registry', () => {
 		assert.ok(listTools().length > 40);
 		assert.deepStrictEqual(getToolMeta('write_file')?.tags, ['fs']);
 		assert.strictEqual(getToolMeta('write_file')?.risk, 'write');
-		assert.ok(listToolsByTag('mcp').some((t) => t.name === 'call_mcp_tool'));
+		assert.ok(listToolsByTag('shell').some((t) => t.name === 'run_command'));
 	});
 });

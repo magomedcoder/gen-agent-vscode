@@ -29,7 +29,7 @@ Confirmations are controlled in **Settings -> Security** (`approvalPolicy` + `au
 | `deny`        | Blocked; reason returned to the model                                                                            |
 | `autoApprove` | Treats `ask` as allow; **deny stays deny**                                                                       |
 
-Per-action keys: `shell`, `edits`, `delete`, `mcp`, `web`, `outside`, `task`, `skill`. Capability toggles (terminal / file / web / ...) are coarse switches on top.
+Per-action keys: `shell`, `edits`, `delete`, `web`, `outside`, `task`, `skill`. Capability toggles (terminal / file / web / ...) are coarse switches on top.
 
 ## Chat UI
 

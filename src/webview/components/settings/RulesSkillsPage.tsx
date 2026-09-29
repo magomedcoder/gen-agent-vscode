@@ -59,15 +59,15 @@ export function RulesSkillsPage({ data, onLoad, onOpenPath }: RulesSkillsPagePro
 			{rules.length === 0 ? (
 				<span className="field__hint">{t('settings.rulesSkills.rulesEmpty')}</span>
 			) : (
-				<div className="mcp-list">
+				<div className="settings-list">
 					{rules.map((rule) => {
 						const canOpen = rule.exists || isHttpUrl(rule.path);
 						return (
-							<div key={`${rule.label}:${rule.path}`} className="mcp-card">
-								<div className="mcp-card__header">
-									<div className="mcp-card__title-row">
-										<span className="mcp-card__name">{rule.label}</span>
-										<span className={`mcp-card__badge${rule.exists ? ' mcp-card__badge--ok' : ' mcp-card__badge--muted'}`}>
+							<div key={`${rule.label}:${rule.path}`} className="settings-card">
+								<div className="settings-card__header">
+									<div className="settings-card__title-row">
+										<span className="settings-card__name">{rule.label}</span>
+										<span className={`settings-card__badge${rule.exists ? ' settings-card__badge--ok' : ' settings-card__badge--muted'}`}>
 											{rule.exists
 												? t('settings.rulesSkills.existsYes')
 												: t('settings.rulesSkills.existsNo')}
@@ -83,7 +83,7 @@ export function RulesSkillsPage({ data, onLoad, onOpenPath }: RulesSkillsPagePro
 										</button>
 									) : null}
 								</div>
-								<span className="mcp-card__command">{rule.path}</span>
+								<span className="settings-card__command">{rule.path}</span>
 							</div>
 						);
 					})}
@@ -93,12 +93,12 @@ export function RulesSkillsPage({ data, onLoad, onOpenPath }: RulesSkillsPagePro
 
 			<SettingsSection titleKey="settings.section.rulesSkills.skills" defaultOpen={false}>
 			{skills.length === 0 ? (<span className="field__hint">{t('settings.rulesSkills.skillsEmpty')}</span>) : (
-				<div className="mcp-list">
+				<div className="settings-list">
 					{skills.map((skill) => (
-						<div key={`${skill.name}:${skill.path}`} className="mcp-card">
-							<div className="mcp-card__header">
-								<div className="mcp-card__title-row">
-									<span className="mcp-card__name">{skill.name}</span>
+						<div key={`${skill.name}:${skill.path}`} className="settings-card">
+							<div className="settings-card__header">
+								<div className="settings-card__title-row">
+									<span className="settings-card__name">{skill.name}</span>
 								</div>
 								<button
 									className="btn btn--secondary"
@@ -108,8 +108,8 @@ export function RulesSkillsPage({ data, onLoad, onOpenPath }: RulesSkillsPagePro
 									{t('settings.rulesSkills.open')}
 								</button>
 							</div>
-							{skill.description ? (<span className="mcp-card__tool-desc">{skill.description}</span>) : null}
-							<span className="mcp-card__command">{skill.path}</span>
+							{skill.description ? (<span className="settings-card__tool-desc">{skill.description}</span>) : null}
+							<span className="settings-card__command">{skill.path}</span>
 						</div>
 					))}
 				</div>
@@ -120,13 +120,13 @@ export function RulesSkillsPage({ data, onLoad, onOpenPath }: RulesSkillsPagePro
 			{plugins.length === 0 ? (
 				<span className="field__hint">{t('settings.rulesSkills.pluginsEmpty')}</span>
 			) : (
-				<div className="mcp-list">
+				<div className="settings-list">
 					{plugins.map((item) => (
-						<div key={`${item.kind}:${item.name}:${item.path}`} className="mcp-card">
-							<div className="mcp-card__header">
-								<div className="mcp-card__title-row">
-									<span className="mcp-card__name">{item.name}</span>
-									<span className="mcp-card__badge mcp-card__badge--muted">
+						<div key={`${item.kind}:${item.name}:${item.path}`} className="settings-card">
+							<div className="settings-card__header">
+								<div className="settings-card__title-row">
+									<span className="settings-card__name">{item.name}</span>
+									<span className="settings-card__badge settings-card__badge--muted">
 										{item.kind === 'tool'
 											? t('settings.rulesSkills.kindTool')
 											: t('settings.rulesSkills.kindPlugin')}
@@ -141,9 +141,9 @@ export function RulesSkillsPage({ data, onLoad, onOpenPath }: RulesSkillsPagePro
 								</button>
 							</div>
 							{item.description ? (
-								<span className="mcp-card__tool-desc">{item.description}</span>
+								<span className="settings-card__tool-desc">{item.description}</span>
 							) : null}
-							<span className="mcp-card__command">{item.path}</span>
+							<span className="settings-card__command">{item.path}</span>
 						</div>
 					))}
 				</div>

@@ -6,9 +6,9 @@
 
 ## Settings screens
 
-Sidebar is a single flat list (**7 screens**). Sections inside a screen are collapsible.
+Sidebar is a single flat list (**6 screens**). Sections inside a screen are collapsible.
 
-**Connection** (incl. Requests) **Chat** **Agent** (incl. Indexing) **Security** (incl. Permissions) **Project** (Rules, Personas, Agents, Hooks) **MCP** **Journal** (Usage, Activity, Logs).
+**Connection** (incl. Requests) **Chat** **Agent** (incl. Indexing) **Security** (incl. Permissions) **Project** (Rules, Personas, Agents, Hooks) **Journal** (Usage, Activity, Logs).
 
 Use Base URL + model list for any OpenAI-compatible endpoint (e.g. `http://127.0.0.1:8080/v1` for llama.cpp).
 
@@ -32,7 +32,7 @@ Optional machine-wide policy file (first match):
 2. Linux / macOS: `/etc/gen/policy.json`
 3. Windows: `%ProgramData%/gen/policy.json`
 
-Keys present in the file are **locked** and force effective settings. Supported lock keys: `approvalPolicy`, `autoApprove`, `continueLoopOnDeny`, `enableTerminal`, `enableFileReading`, `enableWorkspaceContext`, `webSearchEnabled`, `webFetchEnabled`, `allowExternalDirectory`, `otelEnabled`, `otelEndpoint`, `mcpServers`. Optional `mcpServersAllowlist` (string patterns with `*`) filters MCP server names after merge.
+Keys present in the file are **locked** and force effective settings. Supported lock keys: `approvalPolicy`, `autoApprove`, `continueLoopOnDeny`, `enableTerminal`, `enableFileReading`, `enableWorkspaceContext`, `webSearchEnabled`, `webFetchEnabled`, `allowExternalDirectory`, `otelEnabled`, `otelEndpoint`, `providerUsePolicy`, `providerUsePatterns`.
 
 Example:
 
@@ -42,8 +42,7 @@ Example:
   "webSearchEnabled": false,
   "webFetchEnabled": false,
   "allowExternalDirectory": false,
-  "otelEnabled": false,
-  "mcpServersAllowlist": ["corp-*", "internal"]
+  "otelEnabled": false
 }
 ```
 
@@ -51,7 +50,7 @@ When active, Gen Settings shows a read-only banner listing locked keys. Schema: 
 
 The Gen Settings UI stays intact: layers are an additive overlay. Project overrides user and non-default UI values for keys set in JSON. Admin wins for locked keys. The only VS Code Settings key (`gen.chatViewLocation`) is synced from effective config for view `when` clauses.
 
-Supported JSON keys (GenSettings subset): `systemPrompt`, `commentSystemPrompt`, `mcpServers`, `codeModeEnabled`, `primaryTools`, `watcherIgnore`, `webSearch*` (`webSearchBackend`: `duckduckgo` \| `exa` \| `parallel` \| `http`), `webFetchEnabled`, `skillsPaths` / `skillsUrls` / `instructionUrls`, `personaId`, `usernameDisplay`, deny/security lists, agent/indexing knobs, timeouts, `chatMode`, `planShellPolicy` (`ask` \| `deny`), `shareMode`, `revealOnEdit`, `thinkingDisplay`, `chatViewLocation`, and more - see `FILE_LAYER_KEYS` in `src/core/config/layers.ts`.
+Supported JSON keys (GenSettings subset): `systemPrompt`, `commentSystemPrompt`, `primaryTools`, `watcherIgnore`, `webSearch*` (`webSearchBackend`: `duckduckgo` \| `exa` \| `parallel` \| `http`), `webFetchEnabled`, `skillsPaths` / `skillsUrls` / `instructionUrls`, `personaId`, `usernameDisplay`, deny/security lists, agent/indexing knobs, timeouts, `chatMode`, `planShellPolicy` (`ask` \| `deny`), `shareMode`, `revealOnEdit`, `thinkingDisplay`, `chatViewLocation`, and more - see `FILE_LAYER_KEYS` in `src/core/config/layers.ts`.
 
 Also in JSON:
 
@@ -73,7 +72,7 @@ Shell commands per event. Always set `GEN_HOOK_EVENT`. Non-zero exit **vetoes** 
 
 Aliases: `sessionDiff` / `session.diff`, `shellEnv` / `shell.env`, `fileWatcher` / `file.watcher`.
 
-Project metadata (`version`, `createdAt`, `$schema`) is not mapped into settings. Arrays (e.g. `mcpServers`) are **replaced** on merge, not concatenated.
+Project metadata (`version`, `createdAt`, `$schema`) is not mapped into settings. Arrays (e.g. `deniedPaths`, `skillsPaths`) are **replaced** on merge, not concatenated.
 
 ### JSON Schema
 

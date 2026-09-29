@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AdminPolicyInfo, ChatViewState, IndexEngineStatus, McpServerStatus, PanelScreen, PersonaOption, ToWebviewMessage } from '../features/chat/protocol';
+import type { AdminPolicyInfo, ChatViewState, IndexEngineStatus, PanelScreen, PersonaOption, ToWebviewMessage } from '../features/chat/protocol';
 import type { GenSettings } from '../core/config/types';
 import { DEFAULT_SETTINGS } from '../core/config/types';
 import type { LlmModelOption } from '../core/llm/types';
@@ -66,7 +66,6 @@ export function useGenBridge() {
 		message: string
 	} | undefined>();
 	const [connectionHealthLoading, setConnectionHealthLoading] = useState(false);
-	const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
 	const [indexStatus, setIndexStatus] = useState<IndexEngineStatus | undefined>();
 	const [hooks, setHooks] = useState<HooksPageData | undefined>();
 	const [hooksStatus, setHooksStatus] = useState<string | undefined>();
@@ -159,9 +158,6 @@ export function useGenBridge() {
 						ok: data.ok,
 						message: data.message
 					});
-					return;
-				case 'mcpStatus':
-					setMcpServers(data.servers);
 					return;
 				case 'indexStatus':
 					setIndexStatus(data.status);
@@ -287,30 +283,6 @@ export function useGenBridge() {
 		vscodeApi.postMessage({ type: 'openLogsFolder' });
 	}, []);
 
-	const refreshMcp = useCallback(() => {
-		vscodeApi.postMessage({ type: 'refreshMcp' });
-	}, []);
-
-	const reconnectMcp = useCallback((serverName: string) => {
-		vscodeApi.postMessage({ type: 'reconnectMcp', serverName });
-	}, []);
-
-	const refreshMcpTools = useCallback((serverName: string) => {
-		vscodeApi.postMessage({ type: 'refreshMcpTools', serverName });
-	}, []);
-
-	const mcpOAuthAuth = useCallback((serverName: string) => {
-		vscodeApi.postMessage({ type: 'mcpOAuthAuth', serverName });
-	}, []);
-
-	const mcpOAuthLogout = useCallback((serverName: string) => {
-		vscodeApi.postMessage({ type: 'mcpOAuthLogout', serverName });
-	}, []);
-
-	const mcpOAuthDebug = useCallback((serverName: string) => {
-		vscodeApi.postMessage({ type: 'mcpOAuthDebug', serverName });
-	}, []);
-
 	const loadIndexStatus = useCallback(() => {
 		vscodeApi.postMessage({ type: 'loadIndexStatus' });
 	}, []);
@@ -389,7 +361,6 @@ export function useGenBridge() {
 		modelsLoading,
 		connectionHealth,
 		connectionHealthLoading,
-		mcpServers,
 		indexStatus,
 		hooks,
 		hooksStatus,
@@ -400,12 +371,6 @@ export function useGenBridge() {
 		loadModels,
 		checkConnection,
 		openLogsFolder,
-		refreshMcp,
-		reconnectMcp,
-		refreshMcpTools,
-		mcpOAuthAuth,
-		mcpOAuthLogout,
-		mcpOAuthDebug,
 		loadIndexStatus,
 		cancelIndex,
 		repairIndex,

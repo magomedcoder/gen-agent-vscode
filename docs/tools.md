@@ -20,7 +20,6 @@ Builtin tools are registered via a **registry** and grouped by category folders.
 | `search/` | `glob`, `grep`, `file_search`, `find_code`, `find_symbol`, `codebase_search`, `semantic_search`, `search_docs`, `project_map`, `pack_context`, `similar_code`                            |
 | `shell/`  | `run_command`, `await_shell`, `run_tests`, `run_scratch` (+ `task` implementation)                                                                                                       |
 | `ide/`    | `get_active_editor`, `get_open_editors`, `open_file`, `close_file`, `reveal_line`, `git_status`, `get_diagnostics`, `lsp`, `find_references`                                             |
-| `mcp/`    | `list_mcp_tools`, `call_mcp_tool`, `execute`                                                                                                                                             |
 | `plan/`   | `propose_plan`, `update_plan`, `write_plan`, `list_plans`, `plan_enter`, `plan_exit`, `switch_mode`                                                                                      |
 | `meta/`   | `get_workspace_info`, todos / `ask_question` / `skill` / plugins / `task` / `generate_agent` / `register_ephemeral_tool` / `repo_health` / `test_impact` / web / logs / `design_inspect` |
 
@@ -76,9 +75,6 @@ Confirmations are a **card in Gen chat** (Apply / Skip / Stop or Apply / Reject)
 | `register_ephemeral_tool` | Register a markdown-only tool for this run (no JS; auto-cleared)                                                         | no                                                                   |
 | `repo_health`             | MVP: TS/JS import-cycle heuristics + orphan files (JSON)                                                                 | no                                                                   |
 | `test_impact`             | Suggest related `*test*` / `__tests__` from paths or git dirty                                                           | no                                                                   |
-| `list_mcp_tools`          | List connected MCP servers and their tools                                                                               | no                                                                   |
-| `call_mcp_tool`           | Call one MCP tool (stdio)                                                                                                | Ask (confirmAlwaysOrSkip; action `mcp`)                              |
-| `execute`                 | Experimental code-mode: JSON steps * MCP tools only (`codeModeEnabled`)                                                  | Ask per step (same as `call_mcp_tool`)                               |
 
 ## Notes
 
@@ -90,7 +86,7 @@ Confirmations are a **card in Gen chat** (Apply / Skip / Stop or Apply / Reject)
 - Multiple files: start with `propose_plan` -> `.gen/plan.md`; progress via `update_plan`. The plan survives **Clear** chat.
 - Large file: short `write_file` scaffold, then `apply_patch` in chunks.
 - After successful `write_file` / `apply_patch`, if the file has diagnostics, the tool result appends a short nudge (tool still succeeds). Opt-in `formatAfterEdit` in settings runs `editor.action.formatDocument` after those edits.
-- Optional setting `primaryTools` (tool names, one per line): when non-empty, only those tools are offered to the primary agent (`list_mcp_tools` stays available; empty filter falls back to all). Subagents ignore this list. Include `execute` explicitly if you use a primary allowlist with code-mode.
+- Optional setting `primaryTools` (tool names, one per line): when non-empty, only those tools are offered to the primary agent (empty filter falls back to all). Subagents ignore this list.
 - Subagent tool `task` (`explore` / `general` / `scout` / presets / `.gen/agents/`):
   - `prompt` - single job; or `prompts[]` - fan-out (read-only research by default).
   - `max_parallel` - concurrency for `prompts[]` (default 3, max 6).
@@ -101,12 +97,10 @@ Confirmations are a **card in Gen chat** (Apply / Skip / Stop or Apply / Reject)
   - `resume_job_id` - restart a previous aborted/error job (same id prefix).
   - `cleanup_worktree` - after successful **readonly** job, remove the created worktree (default **true** for explore/scout; never auto-deletes mutating worktrees). Teams UI can also cleanup finished worktrees.
   - Optional git worktree via setting `worktreesEnabled` or arg `use_worktree`. Creates branch under `.gen/worktrees/<slug>/` (fallback: sibling `*.gen-worktrees/`). Optional `worktreeStartCommand` runs once after create. Non-git workspace -> skipped, normal subagent.
-- Experimental **code-mode** (`codeModeEnabled`, default off): tool `execute` runs a JSON array of steps `[{ "tool": "server__toolName", "arguments": { ... } }, ...]` (or the same array as a `script` JSON string). Only declared MCP tools by name - **no** host `eval` / Node / `require` / `fs`. Each step reuses the `call_mcp_tool` approval path. Max 32 steps per call.
 - Project overview: `project_map` for a cached module tree; prefer `find_code` (intent: `symbol` \| `path` \| `text` \| `mixed`) to fan out across path/text/index/semantic/symbols; `find_symbol` for LSP cache; `pack_context` / `similar_code` for task-scoped packs and duplicates; `codebase_search` for the trigram index alone; exact grep - `grep` / `glob`.
 - If the user edited a file after the agent: full `write_file` is rejected; patch via `apply_patch` / `apply_workspace_edit` after a fresh `read_file`.
 - `run_command` without shell/pipe. Blocked binaries come from `deniedCommands`. Eval / git write / package install stay blocked in code. Confirm via `approvalPolicy` / `autoApprove` (Security settings).
 - After an agent turn you can **Restore snapshot**.
 - Secrets in tool results are masked by regexps from settings (if set).
-- MCP `mcpServers` strings (`command`, `args`, `env` / `headers` values, `cwd`) interpolate `${env:NAME}` / `{env:NAME}` and `{file:path}` (relative to the workspace folder). Optional `headers` become `GEN_MCP_HEADER_*` env vars for stdio (future HTTP transport will send them as HTTP headers).
 
 Command policy details: [security.md](security.md#commands-run_command).

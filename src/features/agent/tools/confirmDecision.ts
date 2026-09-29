@@ -57,7 +57,7 @@ export type ToolConfirmGating = {
 };
 
 /**
- * Центральный gating до confirmAlwaysOrSkip (edits/shell/mcp/web).
+ * Центральный gating до confirmAlwaysOrSkip (edits/shell/web).
  * deny обрабатывается отдельно (ранний return); сюда приходит ask|allow|review.
  */
 export function resolveToolConfirmGating(input: {

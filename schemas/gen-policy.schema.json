@@ -19,7 +19,7 @@
 		},
 		"approvalPolicy": {
 			"type": "object",
-			"description": "Forced approval policy (shell / edits / delete / mcp / web / outside / task / skill)."
+			"description": "Forced approval policy (shell / edits / delete / web / outside / task / skill)."
 		},
 		"autoApprove": { "type": "boolean" },
 		"continueLoopOnDeny": { "type": "boolean" },
@@ -31,26 +31,6 @@
 		"allowExternalDirectory": { "type": "boolean" },
 		"otelEnabled": { "type": "boolean" },
 		"otelEndpoint": { "type": "string" },
-		"mcpServers": {
-			"type": "array",
-			"description": "Force MCP server list (replaces user/project mcpServers).",
-			"items": {
-				"type": "object",
-				"required": ["name", "command"],
-				"properties": {
-					"name": { "type": "string" },
-					"command": { "type": "string" },
-					"args": { "type": "array", "items": { "type": "string" } },
-					"enabled": { "type": "boolean" }
-				},
-				"additionalProperties": true
-			}
-		},
-		"mcpServersAllowlist": {
-			"type": "array",
-			"items": { "type": "string" },
-			"description": "After merge, keep only MCP servers whose name matches one of these patterns (* wildcards)."
-		},
 		"providerUsePolicy": {
 			"type": "string",
 			"enum": ["allow", "deny"],

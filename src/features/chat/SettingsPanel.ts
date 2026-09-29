@@ -5,7 +5,6 @@ import { clearApiKey, clearWebSearchApiKey, getSettings, hasApiKey, hasWebSearch
 import { getPersistedAlwaysAllow, setPersistedAlwaysAllow } from '../../core/stores/alwaysAllowStore';
 import { collectIndexEngineStatus } from '../index/engineStatus';
 import { getIndexManagerInstance } from '../index/IndexManager';
-import { getMcpManager } from '../../integrations/mcpClient';
 import { HttpLlmClient } from '../../core/llm/client';
 import { loadWebviewL10n } from '../../l10n/loadBundle';
 import { revealLogsFolder } from '../../core/log/logger';
@@ -15,9 +14,6 @@ import { listRulesCandidates } from '../project/projectRules';
 import { discoverSkills } from '../project/skills';
 import { discoverLocalPlugins } from '../project/plugins';
 import { clearActivity, readActivity } from '../../core/stores/activityStore';
-import { clearMcpOAuthPkceSession, clearMcpOAuthTokens, getMcpOAuthDebugInfo, getMcpOAuthPkceSession, parseMcpOAuthPastePayload, setMcpOAuthLastError, setMcpOAuthPkceSession, setMcpOAuthTokens } from '../../core/stores/mcpOAuthStore';
-import { buildAuthorizeUrl, discoverOAuthEndpoints, exchangeAuthorizationCode, generateOAuthState, generatePkcePair, parseAuthorizationCallbackInput } from '../../core/stores/mcpOAuthPkce';
-import { buildMcpOAuthRedirectUri } from '../../integrations/mcpOAuthUriHandler';
 import { readUsage, resetUsage } from '../../core/stores/usageStore';
 import { createNonce, renderChatHtml } from './chatHtml';
 import type { AdminPolicyInfo, FromWebviewMessage, PersonaOption, ToWebviewMessage } from './protocol';
@@ -194,28 +190,6 @@ export class SettingsPanel {
 					entries: readActivity(),
 				});
 				return;
-			case 'refreshMcp':
-				await this.postMcpStatus();
-				return;
-			case 'reconnectMcp':
-				await getMcpManager().reconnect(msg.serverName);
-				await this.postMcpStatus(false);
-				return;
-			case 'refreshMcpTools':
-				try {
-					await getMcpManager().refreshTools(msg.serverName);
-				} catch {}
-				await this.postMcpStatus(false);
-				return;
-			case 'mcpOAuthAuth':
-				await this.handleMcpOAuthAuth(msg.serverName);
-				return;
-			case 'mcpOAuthLogout':
-				await this.handleMcpOAuthLogout(msg.serverName);
-				return;
-			case 'mcpOAuthDebug':
-				await this.handleMcpOAuthDebug(msg.serverName);
-				return;
 			case 'loadIndexStatus':
 				await this.postIndexStatus();
 				return;
@@ -289,8 +263,7 @@ export class SettingsPanel {
 						personas: await this.listPersonaOptions(),
 						adminPolicy: this.adminPolicyInfo(),
 					});
-					// После сохранения - обновить MCP и статус индекса в фоне
-					void this.postMcpStatus();
+					// После сохранения - обновить статус индекса в фоне
 					void this.postIndexStatus();
 				} catch (err) {
 					this.post({
@@ -300,18 +273,6 @@ export class SettingsPanel {
 				}
 				return;
 		}
-	}
-
-	// Переподключить MCP и отправить статус в webview
-	private async postMcpStatus(fullRefresh = true): Promise<void> {
-		const mcp = getMcpManager();
-		if (fullRefresh) {
-			await mcp.refresh();
-		}
-		this.post({
-			type: 'mcpStatus',
-			servers: await mcp.status(),
-		});
 	}
 
 	private hooksFileUri(): vscode.Uri | undefined {
@@ -748,208 +709,5 @@ export class SettingsPanel {
 				this.modelsAbort = undefined;
 			}
 		}
-	}
-
-	// Auth: discovery (опц.) -> PKCE openExternal -> paste code/URL/token; UriHandler тоже завершает code flow
-	private async handleMcpOAuthAuth(serverName: string): Promise<void> {
-		const name = serverName.trim();
-		if (!name) {
-			void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.invalidServer'));
-			return;
-		}
-
-		const cfg = getSettings().mcpServers.find((s) => s.name === name);
-		if (!cfg || cfg.oauth !== true) {
-			void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.notEnabled', name));
-			return;
-		}
-
-		let authorizeUrl = (cfg.mcpOAuthAuthorizeUrl ?? '').trim();
-		let tokenUrl = (cfg.mcpOAuthTokenUrl ?? '').trim();
-		const issuer = (cfg.mcpOAuthIssuer ?? '').trim();
-		const clientId = (cfg.mcpOAuthClientId ?? '').trim() || 'gen-agent-vscode';
-
-		if (issuer && (!authorizeUrl || !tokenUrl)) {
-			try {
-				const discovered = await discoverOAuthEndpoints(issuer);
-				if (!authorizeUrl && discovered.authorizationEndpoint) {
-					authorizeUrl = discovered.authorizationEndpoint;
-				}
-				if (!tokenUrl && discovered.tokenEndpoint) {
-					tokenUrl = discovered.tokenEndpoint;
-				}
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				setMcpOAuthLastError(name, message);
-				void vscode.window.showWarningMessage(vscode.l10n.t('mcp.oauth.discoveryFailed', message));
-			}
-		}
-
-		let pkceOpened = false;
-		if (authorizeUrl) {
-			try {
-				const parsedAuth = vscode.Uri.parse(authorizeUrl);
-				if (parsedAuth.scheme !== 'http' && parsedAuth.scheme !== 'https') {
-					void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.invalidAuthorizeUrl'));
-					return;
-				}
-
-				if (!tokenUrl) {
-					void vscode.window.showWarningMessage(vscode.l10n.t('mcp.oauth.missingTokenUrl'));
-				} else {
-					const extensionId = this.context.extension.id;
-					const redirectUri = await buildMcpOAuthRedirectUri(extensionId);
-					const pkce = generatePkcePair();
-					const state = generateOAuthState();
-					await setMcpOAuthPkceSession({
-						serverName: name,
-						codeVerifier: pkce.verifier,
-						state,
-						tokenUrl,
-						redirectUri,
-						clientId,
-						createdAt: Date.now(),
-					});
-					const urlWithPkce = buildAuthorizeUrl({
-						authorizeUrl,
-						clientId,
-						redirectUri,
-						codeChallenge: pkce.challenge,
-						state,
-					});
-					await vscode.env.openExternal(vscode.Uri.parse(urlWithPkce));
-					pkceOpened = true;
-					void vscode.window.showInformationMessage(vscode.l10n.t('mcp.oauth.browserOpenedPkce'));
-				}
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				setMcpOAuthLastError(name, message);
-				void vscode.window.showErrorMessage(message);
-				await this.postMcpStatus();
-				return;
-			}
-		}
-
-		const token = await vscode.window.showInputBox({
-			title: vscode.l10n.t('mcp.oauth.pasteTitle', name),
-			prompt: pkceOpened
-				? vscode.l10n.t('mcp.oauth.pastePromptPkce')
-				: vscode.l10n.t('mcp.oauth.pastePrompt'),
-			placeHolder: pkceOpened
-				? vscode.l10n.t('mcp.oauth.pastePlaceholderPkce')
-				: vscode.l10n.t('mcp.oauth.pastePlaceholder'),
-			password: true,
-			ignoreFocusOut: true,
-		});
-		if (token === undefined) {
-			return;
-		}
-
-		const callback = parseAuthorizationCallbackInput(token);
-		if (callback.code && tokenUrl) {
-			const session = await getMcpOAuthPkceSession(name);
-			const verifier = session?.codeVerifier;
-			const redirectUri = session?.redirectUri;
-			const exchangeClientId = session?.clientId || clientId;
-			if (!verifier || !redirectUri) {
-				void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.pkceSessionMissing'));
-				return;
-			}
-
-			try {
-				const exchanged = await exchangeAuthorizationCode({
-					tokenUrl: session?.tokenUrl || tokenUrl,
-					code: callback.code,
-					codeVerifier: verifier,
-					redirectUri,
-					clientId: exchangeClientId,
-				});
-				await setMcpOAuthTokens(name, {
-					accessToken: exchanged.accessToken,
-					...(exchanged.refreshToken ? { refreshToken: exchanged.refreshToken } : {}),
-					...(exchanged.expiresAt !== undefined ? { expiresAt: exchanged.expiresAt } : {}),
-					meta: { client_id: exchangeClientId },
-				});
-				await clearMcpOAuthPkceSession(name);
-				setMcpOAuthLastError(name, undefined);
-				void vscode.window.showInformationMessage(vscode.l10n.t('mcp.oauth.tokenSaved', name));
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				setMcpOAuthLastError(name, message);
-				void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.codeExchangeFailed', message));
-			}
-			await this.postMcpStatus();
-			return;
-		}
-
-		const parsed = parseMcpOAuthPastePayload(token);
-		if (!parsed?.accessToken) {
-			void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.emptyToken'));
-			return;
-		}
-
-		try {
-			await setMcpOAuthTokens(name, {
-				...parsed,
-				meta: {
-					...(parsed.meta ?? {}),
-					client_id: clientId,
-				},
-			});
-			setMcpOAuthLastError(name, undefined);
-			void vscode.window.showInformationMessage(vscode.l10n.t('mcp.oauth.tokenSaved', name));
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			setMcpOAuthLastError(name, message);
-			void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.saveFailed', message));
-		}
-		await this.postMcpStatus();
-	}
-
-	private async handleMcpOAuthLogout(serverName: string): Promise<void> {
-		const name = serverName.trim();
-		if (!name) {
-			void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.invalidServer'));
-			return;
-		}
-
-		await clearMcpOAuthTokens(name);
-		setMcpOAuthLastError(name, undefined);
-		void vscode.window.showInformationMessage(vscode.l10n.t('mcp.oauth.loggedOut', name));
-		await this.postMcpStatus();
-	}
-
-	private async handleMcpOAuthDebug(serverName: string): Promise<void> {
-		const name = serverName.trim();
-		if (!name) {
-			void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.invalidServer'));
-			return;
-		}
-		
-		const info = await getMcpOAuthDebugInfo(name);
-		const tokenLine = info.hasToken
-			? vscode.l10n.t('mcp.oauth.debug.token', info.maskedPreview ?? '****')
-			: vscode.l10n.t('mcp.oauth.debug.token', vscode.l10n.t('mcp.oauth.debug.none'));
-		const refreshLine = vscode.l10n.t(
-			'mcp.oauth.debug.refresh',
-			info.hasRefreshToken
-				? vscode.l10n.t('mcp.oauth.debug.yes')
-				: vscode.l10n.t('mcp.oauth.debug.none'),
-		);
-		const expires =
-			typeof info.expiresAt === 'number' && Number.isFinite(info.expiresAt)
-				? new Date(info.expiresAt).toLocaleString()
-				: vscode.l10n.t('mcp.oauth.debug.noExpiry');
-		const lines = [
-			vscode.l10n.t('mcp.oauth.debug.server', info.serverName || name),
-			tokenLine,
-			refreshLine,
-			vscode.l10n.t('mcp.oauth.debug.expires', expires),
-			vscode.l10n.t(
-				'mcp.oauth.debug.lastError',
-				info.lastError?.trim() || vscode.l10n.t('mcp.oauth.debug.none'),
-			),
-		];
-		void vscode.window.showInformationMessage(lines.join('\n'), { modal: true });
 	}
 }

@@ -2256,13 +2256,13 @@ body[data-screen='settings'] .settings {
 	opacity: 0.85;
 }
 
-.mcp-list {
+.settings-list {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 }
 
-.mcp-card {
+.settings-card {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
@@ -2272,7 +2272,7 @@ body[data-screen='settings'] .settings {
 	background: var(--vscode-editor-background, transparent);
 }
 
-.mcp-card__header {
+.settings-card__header {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -2280,19 +2280,19 @@ body[data-screen='settings'] .settings {
 	gap: 8px;
 }
 
-.mcp-card__title-row {
+.settings-card__title-row {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	min-width: 0;
 }
 
-.mcp-card__name {
+.settings-card__name {
 	font-weight: 600;
 	font-size: 13px;
 }
 
-.mcp-card__badge {
+.settings-card__badge {
 	font-size: 11px;
 	padding: 1px 6px;
 	border-radius: 3px;
@@ -2300,82 +2300,24 @@ body[data-screen='settings'] .settings {
 	color: var(--vscode-badge-foreground, inherit);
 }
 
-.mcp-card__badge--ok {
+.settings-card__badge--ok {
 	background: color-mix(in srgb, var(--vscode-testing-iconPassed, #388a34) 25%, transparent);
 }
 
-.mcp-card__badge--error {
-	background: color-mix(in srgb, var(--vscode-errorForeground, #f44747) 22%, transparent);
-	color: var(--vscode-errorForeground, #f44747);
-}
-
-.mcp-card__badge--muted {
+.settings-card__badge--muted {
 	opacity: 0.8;
 }
 
-.mcp-card__enabled {
-	margin: 0;
-}
-
-.mcp-card__command {
+.settings-card__command {
 	font-size: 11px;
 	opacity: 0.8;
 	word-break: break-all;
 	white-space: pre-wrap;
 }
 
-.mcp-card__oauth {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-	align-items: center;
-}
-
-.mcp-card__tools-toggle {
-	align-self: flex-start;
-	margin: 0;
-	padding: 0;
-	border: none;
-	background: transparent;
-	color: var(--vscode-textLink-foreground, inherit);
-	font: inherit;
-	font-size: 12px;
-	cursor: pointer;
-}
-
-.mcp-card__tools {
-	margin: 0;
-	padding: 0 0 0 14px;
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-}
-
-.mcp-card__tool {
-	display: flex;
-	flex-direction: column;
-	gap: 1px;
-}
-
-.mcp-card__tool-name {
-	font-size: 12px;
-	font-family: var(--vscode-editor-font-family, monospace);
-}
-
-.mcp-card__tool-desc {
+.settings-card__tool-desc {
 	font-size: 11px;
 	opacity: 0.75;
-}
-
-.mcp-advanced {
-	margin-top: 4px;
-}
-
-.mcp-advanced__summary {
-	cursor: pointer;
-	font-size: 12px;
-	opacity: 0.85;
-	margin-bottom: 6px;
 }
 
 .project-banner {
@@ -2504,8 +2446,8 @@ body.vscode-light .header-opts__select,
 body.vscode-high-contrast .header-opts__select,
 body.vscode-light .header-opts__panel,
 body.vscode-high-contrast .header-opts__panel,
-body.vscode-light .mcp-card,
-body.vscode-high-contrast .mcp-card {
+body.vscode-light .settings-card,
+body.vscode-high-contrast .settings-card {
 	border-color: var(--chat-border);
 }
 
@@ -2617,17 +2559,10 @@ body.vscode-high-contrast .diff-line--del {
 	);
 }
 
-body.vscode-light .mcp-card__badge--ok,
-body.vscode-high-contrast .mcp-card__badge--ok {
+body.vscode-light .settings-card__badge--ok,
+body.vscode-high-contrast .settings-card__badge--ok {
 	background: var(--vscode-testing-iconPassed, #388a34);
 	color: #ffffff;
-}
-
-body.vscode-light .mcp-card__badge--error,
-body.vscode-high-contrast .mcp-card__badge--error {
-	background: var(--vscode-inputValidation-errorBackground, #f2dede);
-	color: var(--vscode-errorForeground, #a1260d);
-	border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
 }
 
 body.vscode-high-contrast .header,

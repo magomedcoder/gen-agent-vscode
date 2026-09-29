@@ -10,7 +10,6 @@ import { getAgentRoot } from '../agentRoot';
 import { extractPathFromPartialJson, parseToolArguments, toLlmToolDefinition } from '../types';
 import type { ToolContext, ToolResult } from '../types';
 import { includeApplyPatchForModel } from '../modelRoutedPatch';
-import { executeSubjectFromArgs, mcpCallSubjectFromArgs } from './mcp/execute';
 import { getToolByName, listTools } from './registry';
 import { confirmAlwaysOrSkip } from './confirm';
 import { shouldOfferAllowRemainingEdits } from './batchEditConfirm';
@@ -89,11 +88,6 @@ export function getAgentLlmTools(mode?: string, opts?: {
 			return false;
 		}
 
-		// Experimental code-mode: opt-in; не отдаём модели, пока выключено
-		if (!settings.codeModeEnabled && tool.name === 'execute') {
-			return false;
-		}
-
 		if ((mode === 'plan' || mode === 'multitask' || mode === 'project') && isMutatingTool(tool.name)) {
 			return false;
 		}
@@ -105,7 +99,7 @@ export function getAgentLlmTools(mode?: string, opts?: {
 		const shellTool = ['run_command', 'run_tests', 'await_shell', 'run_scratch', 'run_plugin'].includes(tool.name);
 		// Plan + planShellPolicy=ask: shell в списке; confirm принудительный в executeAgentTool
 		const planShellAsk = mode === 'plan' && settings.planShellPolicy === 'ask' && shellTool;
-		if (opts?.readonly && (shellTool || ['open_browser', 'call_mcp_tool', 'execute'].includes(tool.name))) {
+		if (opts?.readonly && (shellTool || tool.name === 'open_browser')) {
 			if (!planShellAsk) {
 				return false;
 			}
@@ -130,8 +124,6 @@ export function getAgentLlmTools(mode?: string, opts?: {
 	}
 
 	const allow = new Set(settings.primaryTools.map((name) => name.trim()).filter(Boolean));
-	// list_mcp_tools всегда доступен, чтобы можно было обнаружить MCP
-	allow.add('list_mcp_tools');
 	const primaryFiltered = filtered.filter((tool) => allow.has(tool.name));
 	// пустой результат после фильтра - откат ко всем (essential fallback)
 	const result = primaryFiltered.length > 0 ? primaryFiltered : filtered;
@@ -141,14 +133,6 @@ export function getAgentLlmTools(mode?: string, opts?: {
 function subjectFromArgs(name: string, rawArguments: string): string {
 	try {
 		const args = parseToolArguments(rawArguments);
-		if (name === 'call_mcp_tool') {
-			return mcpCallSubjectFromArgs(args) ?? name;
-		}
-
-		if (name === 'execute') {
-			return executeSubjectFromArgs(rawArguments) ?? name;
-		}
-
 		if (typeof args.path === 'string') {
 			return args.path;
 		}

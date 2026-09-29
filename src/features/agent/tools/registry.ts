@@ -1,10 +1,10 @@
 import type { ChatMode } from '../../../core/config/types';
 import type { ToolDefinition } from '../types';
 
-export type ToolTag = 'fs' | 'search' | 'shell' | 'ide' | 'mcp' | 'plan' | 'meta';
+export type ToolTag = 'fs' | 'search' | 'shell' | 'ide' | 'plan' | 'meta';
 
 // Риск для approval / фильтров (этап 2; permissionPolicy пока по имени)
-export type ToolRisk = 'read' | 'write' | 'shell' | 'web' | 'mcp';
+export type ToolRisk = 'read' | 'write' | 'shell' | 'web';
 
 export type ToolSource = 'builtin' | 'dynamic' | 'ephemeral';
 

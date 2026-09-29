@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode, type SubmitEvent } from 'react';
-import type { AdminPolicyInfo, IndexEngineStatus, McpServerStatus, PersonaOption, ResearchJobUi } from '../../features/chat/protocol';
+import type { AdminPolicyInfo, IndexEngineStatus, PersonaOption, ResearchJobUi } from '../../features/chat/protocol';
 import type { GenSettings } from '../../core/config/types';
 import { DEFAULT_SETTINGS } from '../../core/config/types';
 import type { LlmModelOption } from '../../core/llm/types';
@@ -9,7 +9,6 @@ import { ConnectionPage } from './settings/ConnectionPage';
 import { HooksPage, type HooksPageData } from './settings/HooksPage';
 import { IndexingPage } from './settings/IndexingPage';
 import { LoggingPage } from './settings/LoggingPage';
-import { McpPage } from './settings/McpPage';
 import { SETTINGS_PAGE_CODICON, SETTINGS_PAGE_IDS, settingsNavTitleKey } from './settings/pages';
 import type { SettingsPageId } from './settings/pages';
 import { PermissionsPage } from './settings/PermissionsPage';
@@ -39,7 +38,6 @@ interface SettingsScreenProps {
 		message: string
 	};
 	connectionHealthLoading?: boolean;
-	mcpServers?: McpServerStatus[];
 	indexStatus?: IndexEngineStatus;
 	hooks?: HooksPageData;
 	hooksStatus?: string;
@@ -56,12 +54,6 @@ interface SettingsScreenProps {
 	onLoadModels: (baseUrl: string) => void;
 	onCheckConnection?: (baseUrl: string) => void;
 	onOpenLogsFolder: () => void;
-	onRefreshMcp?: () => void;
-	onReconnectMcp?: (serverName: string) => void;
-	onRefreshMcpTools?: (serverName: string) => void;
-	onMcpOAuthAuth?: (serverName: string) => void;
-	onMcpOAuthLogout?: (serverName: string) => void;
-	onMcpOAuthDebug?: (serverName: string) => void;
 	onLoadIndexStatus?: () => void;
 	onCancelIndex?: () => void;
 	onRepairIndex?: () => void;
@@ -120,7 +112,6 @@ export function SettingsScreen({
 	modelsLoading,
 	connectionHealth,
 	connectionHealthLoading = false,
-	mcpServers = [],
 	indexStatus,
 	hooks,
 	hooksStatus,
@@ -131,12 +122,6 @@ export function SettingsScreen({
 	onLoadModels,
 	onCheckConnection,
 	onOpenLogsFolder,
-	onRefreshMcp,
-	onReconnectMcp,
-	onRefreshMcpTools,
-	onMcpOAuthAuth,
-	onMcpOAuthLogout,
-	onMcpOAuthDebug,
 	onLoadIndexStatus,
 	onCancelIndex,
 	onRepairIndex,
@@ -212,10 +197,6 @@ export function SettingsScreen({
 		};
 		// Admin-forced значения остаются из effective settings
 		for (const key of lockedKeySet) {
-			if (key === 'mcpServersAllowlist') {
-				continue;
-			}
-
 			if (key in settings) {
 				(next as unknown as Record<string, unknown>)[key] = settings[key as keyof GenSettings];
 			}
@@ -377,19 +358,6 @@ export function SettingsScreen({
 									onOpenHooksFile={onOpenHooksFile}
 								/>
 							</>
-						) : null}
-						{page === 'mcp' ? (
-							<McpPage
-								draft={draft}
-								setField={setField}
-								mcpServers={mcpServers}
-								onRefreshMcp={onRefreshMcp}
-								onReconnectMcp={onReconnectMcp}
-								onRefreshMcpTools={onRefreshMcpTools}
-								onMcpOAuthAuth={onMcpOAuthAuth}
-								onMcpOAuthLogout={onMcpOAuthLogout}
-								onMcpOAuthDebug={onMcpOAuthDebug}
-							/>
 						) : null}
 						{page === 'journal' ? (
 							<>

@@ -37,12 +37,12 @@ export function PersonasPage({
 		const isActive = selectedId === persona.id;
 		const canOpen = Boolean(persona.path?.trim());
 		return (
-			<div key={persona.id} className="mcp-card">
-				<div className="mcp-card__header">
-					<div className="mcp-card__title-row">
-						<span className="mcp-card__name">{persona.name}</span>
-						{persona.source === 'builtin' ? (<span className="mcp-card__badge mcp-card__badge--muted">{t('settings.personas.builtinBadge')}</span>) : null}
-						{isActive ? (<span className="mcp-card__badge mcp-card__badge--ok">{t('settings.personas.active')}</span>) : null}
+			<div key={persona.id} className="settings-card">
+				<div className="settings-card__header">
+					<div className="settings-card__title-row">
+						<span className="settings-card__name">{persona.name}</span>
+						{persona.source === 'builtin' ? (<span className="settings-card__badge settings-card__badge--muted">{t('settings.personas.builtinBadge')}</span>) : null}
+						{isActive ? (<span className="settings-card__badge settings-card__badge--ok">{t('settings.personas.active')}</span>) : null}
 					</div>
 					<div className="settings__actions">
 						{canOpen ? (
@@ -64,8 +64,8 @@ export function PersonasPage({
 						</button>
 					</div>
 				</div>
-				{persona.description ? (<span className="mcp-card__tool-desc">{persona.description}</span>) : null}
-				{persona.path ? (<span className="mcp-card__command">{persona.path}</span>) : null}
+				{persona.description ? (<span className="settings-card__tool-desc">{persona.description}</span>) : null}
+				{persona.path ? (<span className="settings-card__command">{persona.path}</span>) : null}
 			</div>
 		);
 	};
@@ -102,7 +102,7 @@ export function PersonasPage({
 			{builtins.length === 0 ? (
 				<span className="field__hint">{t('settings.personas.builtinEmpty')}</span>
 			) : (
-				<div className="mcp-list">{builtins.map(renderCard)}</div>
+				<div className="settings-list">{builtins.map(renderCard)}</div>
 			)}
 			</SettingsSection>
 
@@ -110,7 +110,7 @@ export function PersonasPage({
 			{custom.length === 0 ? (
 				<span className="field__hint">{t('settings.personas.customEmpty')}</span>
 			) : (
-				<div className="mcp-list">{custom.map(renderCard)}</div>
+				<div className="settings-list">{custom.map(renderCard)}</div>
 			)}
 			</SettingsSection>
 		</>

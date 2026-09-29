@@ -89,7 +89,7 @@ export interface GenSettings {
 	 */
 	agentMaxIterations: number;
 	/**
-	 * Политика подтверждений по типам действий (shell / edits / delete / mcp / ...)
+	 * Политика подтверждений по типам действий (shell / edits / delete / ...)
 	 */
 	approvalPolicy: ApprovalPolicy;
 	/**
@@ -354,48 +354,6 @@ export interface GenSettings {
 	 */
 	toolOutputModelMaxChars: number;
 	/**
-	 * Experimental code-mode: tool `execute` (JSON-шаги * MCP tools).
-	 * По умолчанию выключено. Не исполняет произвольный JS на хосте.
-	 */
-	codeModeEnabled: boolean;
-	/**
-	 * Макс. символов результата MCP tool (call_mcp_tool / execute).
-	 * default 50000
-	 */
-	mcpToolResultMaxChars: number;
-	/**
-	 * MCP-серверы (stdio): имя, команда, args, env, headers, cwd, timeoutMs, enabled, oauth, mcpOAuth*.
-	 * headers: для stdio * GEN_MCP_HEADER_*; будущий HTTP-транспорт - как HTTP-заголовки.
-	 * oauth: по умолчанию false / omit; paste-token + PKCE/discovery (issuer / authorize / token URLs).
-	 */
-	mcpServers: Array<{
-		name: string;
-		transport: 'stdio';
-		command: string;
-		args?: string[];
-		env?: Record<string, string>;
-		// Опциональные заголовки (stdio: GEN_MCP_HEADER_*; HTTP: как headers)
-		headers?: Record<string, string>;
-		// Рабочая директория процесса MCP
-		cwd?: string;
-		// Таймаут JSON-RPC запроса в мс
-		timeoutMs?: number;
-		enabled: boolean;
-		/**
-		 * Запросить OAuth. По умолчанию false / omit.
-		 * При true UI показывает Auth / Logout / Debug (paste-token + PKCE code exchange).
-		 */
-		oauth?: boolean;
-		// OIDC/OAuth issuer для discovery (/.well-known/openid-configuration | oauth-authorization-server)
-		mcpOAuthIssuer?: string;
-		// OAuth client_id (публичный PKCE-клиент; default gen-agent-vscode)
-		mcpOAuthClientId?: string;
-		// Authorize URL (если нет discovery). PKCE code_challenge добавляется при Auth
-		mcpOAuthAuthorizeUrl?: string;
-		// Token URL для code/refresh. Discovery может заполнить
-		mcpOAuthTokenUrl?: string;
-	}>;
-	/**
 	 * Лимит вложенности tool `task` (субагенты).
 	 * min - 1, max - 4, default - 2
 	 */
@@ -626,9 +584,6 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	otelEndpoint: '',
 	toolOutputMaxChars: 12_000,
 	toolOutputModelMaxChars: 2_000,
-	codeModeEnabled: false,
-	mcpToolResultMaxChars: 50_000,
-	mcpServers: [],
 	subagentDepth: 2,
 	worktreesEnabled: false,
 	worktreeStartCommand: '',

@@ -4,12 +4,10 @@ import type { ConfirmChoice } from '../agent/types';
 import type { DiffHunkPayload, HunkReviewStatus } from '../agent/diff';
 import type { ActivityEntry } from '../../core/stores/activityStore';
 import type { ModelUsage } from '../../core/stores/usageStore';
-import type { McpServerStatus } from '../../integrations/mcpClient';
 import type { IndexEngineStatus } from '../index/engineStatus';
 import type { SessionSummary } from './sessionStore';
 
 export type { ActivityEntry } from '../../core/stores/activityStore';
-export type { McpServerStatus } from '../../integrations/mcpClient';
 export type { IndexEngineStatus } from '../index/engineStatus';
 export type { ChatMode, ConfirmChoice, DiffHunkPayload, HunkReviewStatus };
 export type ChatRole = 'user' | 'assistant' | 'error' | 'tool';
@@ -222,7 +220,6 @@ export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
 	| { type: 'mentionSuggestions'; requestId: number; items: MentionSuggestion[] }
 	| { type: 'usageLedger'; ledger: Record<string, ModelUsage> }
 	| { type: 'activityLedger'; entries: ActivityEntry[] }
-	| { type: 'mcpStatus'; servers: McpServerStatus[] }
 	| { type: 'indexStatus'; status: IndexEngineStatus }
 	| { type: 'hooksData'; beforeSubmit: string[]; beforeShell: string[]; sessionDiff: string[]; sessionCompacting: string[]; shellEnv: string[]; fileWatcher: string[]; path?: string; error?: string; }
 	| { type: 'hooksSaved'; ok: boolean; error?: string }
@@ -306,12 +303,6 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'resetUsage' }
 	| { type: 'loadActivity' }
 	| { type: 'clearActivity' }
-	| { type: 'refreshMcp' }
-	| { type: 'reconnectMcp'; serverName: string }
-	| { type: 'refreshMcpTools'; serverName: string }
-	| { type: 'mcpOAuthAuth'; serverName: string }
-	| { type: 'mcpOAuthLogout'; serverName: string }
-	| { type: 'mcpOAuthDebug'; serverName: string }
 	| { type: 'loadIndexStatus' }
 	| { type: 'cancelIndex' }
 	| { type: 'repairIndex' }

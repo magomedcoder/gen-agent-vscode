@@ -5,7 +5,6 @@
 ## dev (Версия в разработке)
 
 - **Secrets:** единый SecretStorage vault; `webSearchApiKey` больше не в JSON/слоях (migrate + clear в UI); LLM apiKey через тот же vault
-- **MCP:** Reconnect / Refresh tools по серверу, badge connecting, lastConnectedAt; lazy reconnect на call; AbortSignal cancel; `mcpToolResultMaxChars` (default 50000)
 - **Permissions:** opt-in `persistAlwaysAllow` - Always-паттерны переживают reload (workspaceState); список/очистка в Permissions
 - **Index:** Merkle `dirDigests` content-hash skip (size+mtime gate; одного path+size недостаточно); инкрементальные outline/symbols per-file (debounce watcher; full rebuild после fullIndex)
 - **Outline:** multi-language MVP - non-JS через LSP `DocumentSymbolProvider` (без Tree-sitter); TS/JS по-прежнему `createSourceFile`; regex fallback только если LSP пуст
@@ -18,7 +17,7 @@
 - **Eval:** gate качества retrieval (precision@k / hit-rate / simpleScore, пороги fail) на offline trigram-корпусе + merge fixtures; smoke permissions/confirm в `src/test/eval/`; запуск `npm test -- --grep eval` или `npm run test:eval` (без remote embeddings)
 - **Mentions:** `@Docs` / `@past` / `@terminals` - ранжирование по релевантности query/arg + per-kind квоты токенов (docs 3k / past 2.5k / terminals 2.5k) с eviction низкого score до turn-level `fitMentionsToBudget`
 - **Slash:** валидация `$ARGUMENTS` / `$n` + frontmatter `arguments:`; autocomplete ставит `/cmd ` для ввода args
-- **Тесты:** матрица permission confirm (ask/deny/always/skip/abort * edits/shell + mcp/web stubs; toolsFallback Continue/Stop; continueLoopOnDeny) через pure helpers `confirmDecision` - без живого LLM
+- **Тесты:** матрица permission confirm (ask/deny/always/skip/abort * edits/shell + web stubs; toolsFallback Continue/Stop; continueLoopOnDeny) через pure helpers `confirmDecision` - без живого LLM
 - **Permissions:** единый pipeline confirm на edits - без дублей Always/Apply после central ask/review (`shouldSkipToolConfirm` / `skipConfirm`); стабильные `awaiting_confirm` + busyDetail; conflict overwrite user edits через forceConfirm; совместимо с batch «Allow remaining»
 - **Permissions:** batch confirm правок - при нескольких edits в одном turn на ConfirmCard есть **Allow remaining edits** / «Разрешить остальные правки» (только этот turn; Always / Reject / review diff без изменений; shell и `.env*` по-прежнему ask)
 - **Shell:** потоковый stdout/stderr для long `run_command` / `run_tests` / `run_scratch` (карточка tool + busyDetail, throttle 120ms); cancel через AbortSignal без гонок status
@@ -48,7 +47,6 @@
 - **Tool confirm UX:** статус `awaiting_confirm` на карточке tool + строка busy; pretty JSON args; один центральный ask до execute; ConfirmCard в composer dock; вопрос перед text-only fallback, если сервер отклонил tools
 - **Index/codebase MVP:** `localEmbeddingsMode` (`off`|`trigram`); `embeddingsBaseUrl` / `embeddingsModel`; TS outline -> `.gen/index/outline.json`; tools `find_references`, `design_inspect`; PDF text + до 3 PNG через `pdftoppm`; debounce outline/symbols на watcher
 - Context: n_ctx probe + budget UI + hygiene; Merkle/LSP symbols/`@map`; `edit_file` / scratch / ephemeral / `repo_health`
-- MCP OAuth: OIDC discovery (`mcpOAuthIssuer`), PKCE + обмен code (paste code/URL или UriHandler `/mcp-oauth`); хранение/refresh `refresh_token`; `mcpOAuthTokenUrl` POST refresh
 - `smallModel`: общий `resolveSmallModel` для title + compact/summary
 
 ## 0.3.0 (7 сентября 2026)
@@ -60,9 +58,7 @@
 - Slash-режимы: `/debug` `/design` `/plan` `/ask` `/agent`; также `/export` `/init` `/compact` `/new` `/undo` `/sessions` `/models`
 - Режим **Plan**: правки только на чтение; shell ask или deny (`planShellPolicy`); handoff Plan<->Agent (banner + reminders)
 - Multitask + `plan_enter` / `plan_exit` / `switch_mode`; артефакты WritePlan в `.gen/plans/`
-- MCP stdio: отдельный экран настроек (enable/status/tools + JSON), `list_mcp_tools` / `call_mcp_tool`, cwd/timeout/headers на сервер
-- MCP OAuth MVP: paste-token в SecretStorage, Auth / Logout / Debug
-- Experimental code-mode: opt-in tool `execute` - JSON-шаги только как MCP-вызовы (без eval JS на хосте)
+- Experimental code-mode: opt-in tool `execute` - JSON-шаги (без eval JS на хосте)
 - Skills и rules: `AGENTS.md` / `.genrules`, discovery + tool `skill`, `/init`; экран Rules/Skills
 - Personas: dropdown в Chat + экран Personas (`.gen/personas/`); экран Agents - clone builtin presets в `.gen/agents/`
 - Локальные plugins/tools: discovery `.gen/tools` и `.gen/plugins` (каталог + `list_plugins` / `plugin`)

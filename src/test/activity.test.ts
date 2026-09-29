@@ -5,12 +5,12 @@ suite('activity ledger', () => {
 	test('классифицирует kind по имени tool', () => {
 		assert.strictEqual(activityKindFromTool('run_command'), 'shell');
 		assert.strictEqual(activityKindFromTool('await_shell'), 'shell');
-		assert.strictEqual(activityKindFromTool('call_mcp_tool'), 'mcp');
 		assert.strictEqual(activityKindFromTool('write_file'), 'edit');
 		assert.strictEqual(activityKindFromTool('read_file'), 'tool');
+		assert.strictEqual(activityKindFromTool('web_search'), 'tool');
 	});
 
-	test('summarize берёт path / command / mcp', () => {
+	test('summarize берёт path / command / query', () => {
 		assert.strictEqual(
 			summarizeToolActivity('write_file', '{}', 'src/a.ts'),
 			'write_file: src/a.ts',
@@ -21,10 +21,10 @@ suite('activity ledger', () => {
 		);
 		assert.strictEqual(
 			summarizeToolActivity(
-				'call_mcp_tool',
-				JSON.stringify({ server: 'fs', toolName: 'list' }),
+				'web_search',
+				JSON.stringify({ query: 'typescript vscode extension' }),
 			),
-			'call_mcp_tool: fs/list',
+			'web_search: typescript vscode extension',
 		);
 	});
 });

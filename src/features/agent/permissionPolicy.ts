@@ -12,7 +12,6 @@ const SKILL_TOOLS = new Set(['skill']);
 const WRITE_TOOLS = new Set(['write_file', 'apply_patch', 'apply_workspace_edit', 'edit_file', 'create_dir', 'edit_notebook']);
 const SHELL_TOOLS = new Set(['run_command', 'run_tests', 'await_shell', 'run_scratch']);
 const WEB_TOOLS = new Set(['fetch_page', 'web_search', 'open_browser']);
-const MCP_TOOLS = new Set(['call_mcp_tool', 'execute', 'fetch_mcp_resource', 'list_mcp_resources', 'list_mcp_tools']);
 
 export function toolActionType(toolName: string): ApprovalActionType | undefined {
 	if (DELETE_TOOLS.has(toolName)) {
@@ -40,10 +39,6 @@ export function toolActionType(toolName: string): ApprovalActionType | undefined
 		return 'web';
 	}
 
-	if (risk === 'mcp') {
-		return 'mcp';
-	}
-
 	if (risk === 'read') {
 		return undefined;
 	}
@@ -59,10 +54,6 @@ export function toolActionType(toolName: string): ApprovalActionType | undefined
 
 	if (WEB_TOOLS.has(toolName)) {
 		return 'web';
-	}
-
-	if (MCP_TOOLS.has(toolName)) {
-		return 'mcp';
 	}
 
 	return undefined;
@@ -151,11 +142,11 @@ export function suggestPattern(action: ApprovalActionType, toolName: string, sub
 		}
 	}
 
-	// mcp / task / skill / outside: sessionAllow сверяет `${action}:${subject}` и `subject`
-	if (action === 'mcp' || action === 'task' || action === 'skill' || action === 'outside') {
+	// task / skill / outside: sessionAllow сверяет `${action}:${subject}` и `subject`
+	if (action === 'task' || action === 'skill' || action === 'outside') {
 		const slash = s.indexOf('/');
 		if (slash > 0) {
-			// Префикс до первого `/` - например mcp:server* для server/tool
+			// Префикс до первого `/`
 			return `${action}:${s.slice(0, slash)}*`;
 		}
 

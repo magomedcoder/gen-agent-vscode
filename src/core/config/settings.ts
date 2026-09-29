@@ -4,7 +4,6 @@ import * as vscode from 'vscode';
 import type { ExtensionContext, Memento } from 'vscode';
 import { initApiKeyStore, getWebSearchApiKey, setWebSearchApiKey } from './apiKey';
 import { initAlwaysAllowStore } from '../stores/alwaysAllowStore';
-import { initMcpOAuthStore } from '../stores/mcpOAuthStore';
 import { applyAdminPolicy, stripAdminLockedForStorage } from './adminPolicy';
 import { deepMerge, getFileSettingsOverlay, initConfigLayers, onConfigLayersChanged, pickNonDefaultSettings } from './layers';
 import { clearCachedNCtx } from '../llm/contextBudget';
@@ -215,82 +214,6 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		otelEndpoint: String(raw.otelEndpoint ?? '').trim(),
 		toolOutputMaxChars: Math.max(1000, Math.floor(asNumber(raw.toolOutputMaxChars, DEFAULT_SETTINGS.toolOutputMaxChars))),
 		toolOutputModelMaxChars: Math.max(400, Math.floor(asNumber(raw.toolOutputModelMaxChars, DEFAULT_SETTINGS.toolOutputModelMaxChars))),
-		codeModeEnabled: raw.codeModeEnabled === true,
-		mcpToolResultMaxChars: Math.max(500, Math.floor(asNumber(raw.mcpToolResultMaxChars, DEFAULT_SETTINGS.mcpToolResultMaxChars))),
-		mcpServers: Array.isArray(raw.mcpServers)
-			? raw.mcpServers.filter((s): s is NonNullable<typeof s> => Boolean(s && typeof s === 'object'))
-				.map((s) => {
-					const row = s as {
-						name?: string;
-						command?: string;
-						args?: unknown;
-						env?: Record<string, string>;
-						headers?: Record<string, string>;
-						cwd?: string;
-						timeoutMs?: number;
-						enabled?: boolean;
-						oauth?: boolean;
-						mcpOAuthIssuer?: string;
-						mcpOAuthClientId?: string;
-						mcpOAuthAuthorizeUrl?: string;
-						mcpOAuthTokenUrl?: string;
-					};
-					const timeoutRaw = row.timeoutMs;
-					const timeoutMs = typeof timeoutRaw === 'number' && Number.isFinite(timeoutRaw)
-						? Math.max(1000, Math.floor(timeoutRaw))
-						: undefined;
-					const cwd = typeof row.cwd === 'string' && row.cwd.trim() ? row.cwd.trim() : undefined;
-					// headers: только строковые пары ключ*значение
-					let headers: Record<string, string> | undefined;
-					if (row.headers && typeof row.headers === 'object' && !Array.isArray(row.headers)) {
-						headers = {};
-						for (const [k, v] of Object.entries(row.headers)) {
-							if (typeof k === 'string' && typeof v === 'string') {
-								headers[k] = v;
-							}
-						}
-
-						if (Object.keys(headers).length === 0) {
-							headers = undefined;
-						}
-					}
-
-					// oauth: только true сохраняем; false / omit - по умолчанию выкл
-					const oauth = row.oauth === true ? true : undefined;
-					const issuer = typeof row.mcpOAuthIssuer === 'string' && row.mcpOAuthIssuer.trim()
-						? row.mcpOAuthIssuer.trim()
-						: undefined;
-					const clientId = typeof row.mcpOAuthClientId === 'string' && row.mcpOAuthClientId.trim()
-						? row.mcpOAuthClientId.trim()
-						: undefined;
-					const authorizeUrl = typeof row.mcpOAuthAuthorizeUrl === 'string' && row.mcpOAuthAuthorizeUrl.trim()
-						? row.mcpOAuthAuthorizeUrl.trim()
-						: undefined;
-					const tokenUrl = typeof row.mcpOAuthTokenUrl === 'string' && row.mcpOAuthTokenUrl.trim()
-						? row.mcpOAuthTokenUrl.trim()
-						: undefined;
-					return {
-						name: String(row.name ?? '').trim(),
-						transport: 'stdio' as const,
-						command: String(row.command ?? '').trim(),
-						args: Array.isArray(row.args) ? row.args.map(String) : undefined,
-						env: row.env,
-						headers,
-						cwd,
-						timeoutMs,
-						enabled: row.enabled !== false,
-						...(oauth ? { oauth } : {}),
-						...(issuer ? { mcpOAuthIssuer: issuer } : {}),
-						...(clientId ? { mcpOAuthClientId: clientId } : {}),
-						...(authorizeUrl ? { 
-							mcpOAuthAuthorizeUrl: authorizeUrl 
-						} : {}),
-						...(tokenUrl ? {
-							mcpOAuthTokenUrl: tokenUrl
-						} : {}),
-					};
-				}).filter((s) => s.name && s.command)
-			: [],
 		subagentDepth: clamp(Math.floor(asNumber(raw.subagentDepth, DEFAULT_SETTINGS.subagentDepth)), 1, 4),
 		worktreesEnabled: raw.worktreesEnabled === true,
 		worktreeStartCommand: String(raw.worktreeStartCommand ?? DEFAULT_SETTINGS.worktreeStartCommand).trim(),
@@ -329,7 +252,6 @@ export function initSettings(context: ExtensionContext): void {
 	store = context.globalState;
 	initApiKeyStore(context);
 	initAlwaysAllowStore(context);
-	initMcpOAuthStore(context);
 	sessionModel = '';
 	// JSON-слои: user (~/.config/gen) + project (.gen/config.json)
 	initConfigLayers(context);

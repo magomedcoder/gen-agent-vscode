@@ -31,13 +31,13 @@ suite('config layers', () => {
 			version: 1,
 			createdAt: '2026-01-01',
 			systemPrompt: 'hello',
-			mcpServers: [{ name: 'x', command: 'y', enabled: true }],
+			webSearchEnabled: false,
 			unknownKey: 42,
 			hooksPath: '.gen/custom-hooks.json',
 			hooks: { beforeSubmit: ['echo'] },
 		});
 		assert.strictEqual(parsed.settings.systemPrompt, 'hello');
-		assert.strictEqual(parsed.settings.mcpServers?.length, 1);
+		assert.strictEqual(parsed.settings.webSearchEnabled, false);
 		assert.strictEqual((parsed.settings as { unknownKey?: unknown }).unknownKey, undefined);
 		assert.strictEqual(parsed.hooksPath, '.gen/custom-hooks.json');
 		assert.deepStrictEqual(parsed.hooks, { beforeSubmit: ['echo'] });
@@ -106,20 +106,20 @@ suite('admin policy', () => {
 		delete process.env.GEN_ADMIN_POLICY;
 	});
 
-	test('parseAdminPolicy: только ADMIN_POLICY_KEYS + allowlist', () => {
+	test('parseAdminPolicy: только ADMIN_POLICY_KEYS', () => {
 		const parsed = parseAdminPolicy({
 			$schema: './schemas/gen-policy.schema.json',
 			webSearchEnabled: false,
 			systemPrompt: 'ignored',
-			mcpServersAllowlist: ['corp-*', ''],
+			providerUsePatterns: ['corp-*', ''],
 			otelEnabled: false,
 		});
 		assert.strictEqual(parsed.settings.webSearchEnabled, false);
 		assert.strictEqual(parsed.settings.otelEnabled, false);
 		assert.strictEqual((parsed.settings as { systemPrompt?: unknown }).systemPrompt, undefined);
-		assert.deepStrictEqual(parsed.mcpServersAllowlist, ['corp-*']);
+		assert.deepStrictEqual(parsed.settings.providerUsePatterns, ['corp-*', '']);
 		assert.ok(parsed.lockedKeys.includes('webSearchEnabled'));
-		assert.ok(parsed.lockedKeys.includes('mcpServersAllowlist'));
+		assert.ok(parsed.lockedKeys.includes('providerUsePatterns'));
 		assert.ok(parsed.lockedKeys.includes('otelEnabled'));
 	});
 
@@ -136,7 +136,7 @@ suite('admin policy', () => {
 		assert.deepStrictEqual(resolveAdminPolicyCandidates(), [path.resolve(custom)]);
 	});
 
-	test('applyAdminPolicy: force keys + filter mcpServers', async () => {
+	test('applyAdminPolicy: force keys', async () => {
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gen-admin-'));
 		const file = path.join(dir, 'policy.json');
 		fs.writeFileSync(
@@ -144,7 +144,8 @@ suite('admin policy', () => {
 			JSON.stringify({
 				webSearchEnabled: false,
 				allowExternalDirectory: false,
-				mcpServersAllowlist: ['allowed-*'],
+				providerUsePolicy: 'deny',
+				providerUsePatterns: ['blocked-*'],
 			}),
 			'utf8',
 		);
@@ -156,15 +157,13 @@ suite('admin policy', () => {
 		const merged = applyAdminPolicy({
 			webSearchEnabled: true,
 			allowExternalDirectory: true,
-			mcpServers: [
-				{ name: 'allowed-a', command: 'a', enabled: true, transport: 'stdio' as const },
-				{ name: 'blocked', command: 'b', enabled: true, transport: 'stdio' as const },
-			],
+			providerUsePolicy: 'allow',
+			providerUsePatterns: [],
 		});
 		assert.strictEqual(merged.webSearchEnabled, false);
 		assert.strictEqual(merged.allowExternalDirectory, false);
-		assert.strictEqual(merged.mcpServers?.length, 1);
-		assert.strictEqual(merged.mcpServers?.[0].name, 'allowed-a');
+		assert.strictEqual(merged.providerUsePolicy, 'deny');
+		assert.deepStrictEqual(merged.providerUsePatterns, ['blocked-*']);
 
 		fs.rmSync(dir, { recursive: true, force: true });
 	});

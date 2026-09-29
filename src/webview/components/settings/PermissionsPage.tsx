@@ -5,7 +5,7 @@ import type { SettingsPageProps } from './pages';
 import { FieldTextarea, FieldToggle } from './SettingsFields';
 import { SettingsSection } from './SettingsSection';
 
-const APPROVAL_ACTIONS: ApprovalActionType[] = ['shell', 'edits', 'delete', 'mcp', 'web', 'outside', 'task', 'skill'];
+const APPROVAL_ACTIONS: ApprovalActionType[] = ['shell', 'edits', 'delete', 'web', 'outside', 'task', 'skill'];
 const APPROVAL_MODES: ApprovalMode[] = ['allow', 'ask', 'review', 'deny'];
 
 interface PermissionsPageProps extends SettingsPageProps {
@@ -66,7 +66,7 @@ export function PermissionsPage({
 						type="button"
 						onClick={() => {
 							const next = { ...draft.approvalPolicy };
-							for (const action of ['edits', 'mcp', 'web', 'skill', 'task'] as ApprovalActionType[]) {
+							for (const action of ['edits', 'web', 'skill', 'task'] as ApprovalActionType[]) {
 								next[action] = { ...next[action], mode: 'allow' };
 							}
 							next.shell = { ...next.shell, mode: 'ask' };

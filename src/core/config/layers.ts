@@ -24,9 +24,6 @@ import { getGenUserConfigPath } from './userPaths';
 export const FILE_LAYER_KEYS = [
 	'systemPrompt',
 	'commentSystemPrompt',
-	'mcpServers',
-	'codeModeEnabled',
-	'mcpToolResultMaxChars',
 	'primaryTools',
 	'modelRoutedPatch',
 	'watcherIgnore',

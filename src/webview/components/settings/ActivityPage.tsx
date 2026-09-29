@@ -23,8 +23,6 @@ function kindLabel(kind: ActivityEntry['kind']): string {
 			return t('settings.activity.kind.edit');
 		case 'shell':
 			return t('settings.activity.kind.shell');
-		case 'mcp':
-			return t('settings.activity.kind.mcp');
 		case 'review':
 			return t('settings.activity.kind.review');
 		default:

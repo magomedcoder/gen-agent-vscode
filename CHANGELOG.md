@@ -4,9 +4,7 @@
 
 ## dev (Development version)
 
-
 - **Secrets:** unified SecretStorage vault; `webSearchApiKey` no longer in JSON/settings layers (migrate + clear UI); LLM apiKey via same vault
-- **MCP:** per-server Reconnect / Refresh tools, connecting badge, lastConnectedAt; lazy reconnect on call (no full refresh); AbortSignal cancel; `mcpToolResultMaxChars` (default 50000)
 - **Permissions:** opt-in `persistAlwaysAllow` - Always patterns survive reloads (workspaceState); Permissions UI list/clear
 - **Index:** Merkle `dirDigests` content-hash skip (size+mtime gate; path+size alone no longer skips); incremental outline/symbols per-file (debounced watcher; full rebuild after fullIndex)
 - **Outline:** multi-language MVP - non-JS via LSP `DocumentSymbolProvider` (no Tree-sitter); TS/JS still `createSourceFile`; regex fallback only when LSP empty
@@ -19,7 +17,7 @@
 - **Eval:** retrieval quality gate (precision@k / hit-rate / simpleScore, fail thresholds) on offline trigram corpus + merge fixtures; permissions/confirm smoke in `src/test/eval/`; run `npm test -- --grep eval` or `npm run test:eval` (no remote embeddings)
 - **Mentions:** `@Docs` / `@past` / `@terminals` - rank by query/arg relevance + per-kind token quotas (docs 3k / past 2.5k / terminals 2.5k) with lowest-score eviction before turn-level `fitMentionsToBudget`
 - **Slash:** `$ARGUMENTS` / `$n` validation + frontmatter `arguments:` hint; autocomplete leaves `/cmd ` ready for args
-- **Tests:** permission confirm matrix (ask/deny/always/skip/abort * edits/shell + mcp/web stubs; toolsFallback Continue/Stop; continueLoopOnDeny) via pure `confirmDecision` helpers - no live LLM
+- **Tests:** permission confirm matrix (ask/deny/always/skip/abort * edits/shell + web stubs; toolsFallback Continue/Stop; continueLoopOnDeny) via pure `confirmDecision` helpers - no live LLM
 - **Permissions:** unified edit confirm pipeline - no duplicate Always/Apply after central ask/review (`shouldSkipToolConfirm` / `skipConfirm`); stable `awaiting_confirm` + busyDetail; overwrite-user-edits still forces confirm; compatible with batch Allow remaining
 - **Permissions:** batch edit confirm - several edits in one turn get **Allow remaining edits** on ConfirmCard (turn-scoped; Always / Reject / review diff unchanged; shell and sensitive `.env*` still ask)
 - **Shell:** streaming partial stdout/stderr for long `run_command` / `run_tests` / `run_scratch` (tool card + busyDetail, 120ms throttle); AbortSignal cancel without status races
@@ -49,7 +47,6 @@
 - **Tool confirm UX:** status `awaiting_confirm` on tool card + busy line; pretty JSON args in confirm/card; one central ask before execute; ConfirmCard pinned in composer dock; ask before text-only fallback when server rejects tools
 - **Index/codebase MVP:** `localEmbeddingsMode` (`off`|`trigram`); `embeddingsBaseUrl` / `embeddingsModel`; TS outline -> `.gen/index/outline.json`; tools `find_references`, `design_inspect`; PDF text + up to 3 page PNGs via `pdftoppm`; outline/symbols debounce on watcher
 - Context: n_ctx probe + budget UI + hygiene; Merkle/LSP symbols/`@map`; `edit_file` / scratch / ephemeral / `repo_health`
-- MCP OAuth: OIDC discovery (`mcpOAuthIssuer`), PKCE + code exchange (paste code/URL or UriHandler `/mcp-oauth`); store/refresh optional `refresh_token`; `mcpOAuthTokenUrl` POST refresh
 - `smallModel`: shared `resolveSmallModel` for title agent + compact/summary
 
 ## 0.3.0 (7 September 2026)
@@ -61,9 +58,7 @@
 - Slash modes: `/debug` `/design` `/plan` `/ask` `/agent`; also `/export` `/init` `/compact` `/new` `/undo` `/sessions` `/models`
 - **Plan** mode: read-only edits; shell ask-or-deny (`planShellPolicy`); Plan<->Agent handoff banner and reminders
 - Multitask mode + `plan_enter` / `plan_exit` / `switch_mode`; WritePlan artifacts under `.gen/plans/`
-- MCP stdio client: dedicated Settings page (enable/status/tools + JSON), `list_mcp_tools` / `call_mcp_tool`, per-server cwd/timeout/headers
-- MCP OAuth MVP: paste-token SecretStorage, Auth / Logout / Debug
-- Experimental code-mode: opt-in `execute` tool runs JSON steps as MCP calls only (no host JS eval)
+- Experimental code-mode: opt-in `execute` tool runs JSON (no host JS eval)
 - Skills & rules: `AGENTS.md` / `.genrules`, skills discovery + `skill` tool, `/init`; Settings Rules/Skills page
 - Personas: Chat dropdown + Settings Personas page (`.gen/personas/`); Agents page to clone builtin presets into `.gen/agents/`
 - Local plugins/tools discovery under `.gen/tools` and `.gen/plugins` (catalog + `list_plugins` / `plugin`)

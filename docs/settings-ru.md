@@ -6,9 +6,9 @@
 
 ## Экраны настроек
 
-В боковой панели один плоский список (**7 экранов**). Внутри экрана - сворачиваемые секции.
+В боковой панели один плоский список (**6 экранов**). Внутри экрана - сворачиваемые секции.
 
-**Подключение** (вкл. Запросы) **Чат** **Агент** (вкл. Индекс) **Безопасность** (вкл. Права) **Проект** (Rules, Personas, Agents, Hooks) **MCP** **Журнал** (Usage, Activity, Логи).
+**Подключение** (вкл. Запросы) **Чат** **Агент** (вкл. Индекс) **Безопасность** (вкл. Права) **Проект** (Rules, Personas, Agents, Hooks) **Журнал** (Usage, Activity, Логи).
 
 Для любого OpenAI-compatible endpoint укажите Base URL и модель (например `http://127.0.0.1:8080/v1` для llama.cpp).
 
@@ -32,7 +32,7 @@ Effective `GenSettings` собирается из нескольких слоё�
 2. Linux / macOS: `/etc/gen/policy.json`
 3. Windows: `%ProgramData%/gen/policy.json`
 
-Ключи из файла **блокируются** и форсируют effective settings. Lock-ключи: `approvalPolicy`, `autoApprove`, `continueLoopOnDeny`, `enableTerminal`, `enableFileReading`, `enableWorkspaceContext`, `webSearchEnabled`, `webFetchEnabled`, `allowExternalDirectory`, `otelEnabled`, `otelEndpoint`, `mcpServers`. Опционально `mcpServersAllowlist` (паттерны с `*`) фильтрует имена MCP после merge.
+Ключи из файла **блокируются** и форсируют effective settings. Lock-ключи: `approvalPolicy`, `autoApprove`, `continueLoopOnDeny`, `enableTerminal`, `enableFileReading`, `enableWorkspaceContext`, `webSearchEnabled`, `webFetchEnabled`, `allowExternalDirectory`, `otelEnabled`, `otelEndpoint`, `providerUsePolicy`, `providerUsePatterns`.
 
 Пример:
 
@@ -42,8 +42,7 @@ Effective `GenSettings` собирается из нескольких слоё�
   "webSearchEnabled": false,
   "webFetchEnabled": false,
   "allowExternalDirectory": false,
-  "otelEnabled": false,
-  "mcpServersAllowlist": ["corp-*", "internal"]
+  "otelEnabled": false
 }
 ```
 
@@ -51,7 +50,7 @@ Effective `GenSettings` собирается из нескольких слоё�
 
 UI настроек Gen не ломается: слои аддитивны. Project перекрывает user и изменённые UI-поля по ключам из JSON; admin побеждает для locked keys. Единственный ключ в VS Code Settings (`gen.chatViewLocation`) синхронизируется из effective config для `when`-clause views.
 
-Поддерживаемые ключи JSON (subset `GenSettings`): `systemPrompt`, `commentSystemPrompt`, `mcpServers`, `codeModeEnabled`, `primaryTools`, `watcherIgnore`, `webSearch*` (`webSearchBackend`: `duckduckgo` \| `exa` \| `parallel` \| `http`), `webFetchEnabled`, `skillsPaths` / `skillsUrls` / `instructionUrls`, `personaId`, `usernameDisplay`, deny/security lists, agent/indexing knobs, timeouts, `chatMode`, `planShellPolicy` (`ask` \| `deny`), `shareMode`, `revealOnEdit`, `thinkingDisplay`, `chatViewLocation`, и др. - полный список в `FILE_LAYER_KEYS` (`src/core/config/layers.ts`).
+Поддерживаемые ключи JSON (subset `GenSettings`): `systemPrompt`, `commentSystemPrompt`, `primaryTools`, `watcherIgnore`, `webSearch*` (`webSearchBackend`: `duckduckgo` \| `exa` \| `parallel` \| `http`), `webFetchEnabled`, `skillsPaths` / `skillsUrls` / `instructionUrls`, `personaId`, `usernameDisplay`, deny/security lists, agent/indexing knobs, timeouts, `chatMode`, `planShellPolicy` (`ask` \| `deny`), `shareMode`, `revealOnEdit`, `thinkingDisplay`, `chatViewLocation`, и др. - полный список в `FILE_LAYER_KEYS` (`src/core/config/layers.ts`).
 
 Дополнительно в JSON:
 
@@ -73,7 +72,7 @@ Shell-команды по событиям. Всегда есть `GEN_HOOK_EVEN
 
 Алиасы: `sessionDiff` / `session.diff`, `shellEnv` / `shell.env`, `fileWatcher` / `file.watcher`.
 
-Метаданные project-файла (`version`, `createdAt`, `$schema`) в settings не попадают. Массивы (например `mcpServers`) при merge **заменяются** целиком, не склеиваются.
+Метаданные project-файла (`version`, `createdAt`, `$schema`) в settings не попадают. Массивы (например `deniedPaths`, `skillsPaths`) при merge **заменяются** целиком, не склеиваются.
 
 ### JSON Schema
 

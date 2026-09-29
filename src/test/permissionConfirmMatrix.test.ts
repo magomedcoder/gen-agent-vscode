@@ -10,26 +10,26 @@ import type { ConfirmChoice } from '../features/agent/types.js';
 
 /**
  * Матрица confirm/policy без LLM:
- * ask|deny|allow(+Always)|skip|abort * edits/shell (+ mcp/web stubs) + toolsFallback Continue/Stop.
+ * ask|deny|allow(+Always)|skip|abort * edits/shell (+ web stubs) + toolsFallback Continue/Stop.
  */
 suite('permission confirm matrix', () => {
 	suiteSetup(() => {
 		registerBuiltins();
 	});
 
-	const askPolicy = (action: 'edits' | 'shell' | 'mcp' | 'web'): ApprovalPolicy => {
+	const askPolicy = (action: 'edits' | 'shell' | 'web'): ApprovalPolicy => {
 		const p = structuredClone(DEFAULT_APPROVAL_POLICY);
 		p[action] = { mode: 'ask', allowlist: [], denylist: [] };
 		return p;
 	};
 
-	const denyPolicy = (action: 'edits' | 'shell' | 'mcp' | 'web'): ApprovalPolicy => {
+	const denyPolicy = (action: 'edits' | 'shell' | 'web'): ApprovalPolicy => {
 		const p = structuredClone(DEFAULT_APPROVAL_POLICY);
 		p[action] = { mode: 'deny', allowlist: [], denylist: [] };
 		return p;
 	};
 
-	const allowPolicy = (action: 'edits' | 'shell' | 'mcp' | 'web'): ApprovalPolicy => {
+	const allowPolicy = (action: 'edits' | 'shell' | 'web'): ApprovalPolicy => {
 		const p = structuredClone(DEFAULT_APPROVAL_POLICY);
 		p[action] = { mode: 'allow', allowlist: [], denylist: [] };
 		return p;
@@ -48,17 +48,13 @@ suite('permission confirm matrix', () => {
 			assert.strictEqual(evaluateApproval('shell', 'npm test', allowPolicy('shell')), 'allow');
 		});
 
-		test('mcp / web stubs: ask / deny / allow', () => {
-			assert.strictEqual(evaluateApproval('mcp', 'srv/tool', askPolicy('mcp')), 'ask');
-			assert.strictEqual(evaluateApproval('mcp', 'srv/tool', denyPolicy('mcp')), 'deny');
-			assert.strictEqual(evaluateApproval('mcp', 'srv/tool', allowPolicy('mcp')), 'allow');
-
+		test('web stubs: ask / deny / allow', () => {
 			assert.strictEqual(evaluateApproval('web', 'https://ex.com', askPolicy('web')), 'ask');
 			assert.strictEqual(evaluateApproval('web', 'https://ex.com', denyPolicy('web')), 'deny');
 			assert.strictEqual(evaluateApproval('web', 'https://ex.com', allowPolicy('web')), 'allow');
 		});
 
-		test('Always (sessionAllow): ask -> allow для edits/shell/mcp/web', () => {
+		test('Always (sessionAllow): ask -> allow для edits/shell/web', () => {
 			const editsPat = suggestPattern('edits', 'write_file', 'src/a/b.ts')!;
 			assert.strictEqual(
 				evaluateApproval('edits', 'src/a/b.ts', askPolicy('edits'), [editsPat]),
@@ -68,12 +64,6 @@ suite('permission confirm matrix', () => {
 			const shellPat = suggestPattern('shell', 'run_command', 'npm run test')!;
 			assert.strictEqual(
 				evaluateApproval('shell', 'npm run test', askPolicy('shell'), [shellPat]),
-				'allow',
-			);
-
-			const mcpPat = suggestPattern('mcp', 'call_mcp_tool', 'server/tool')!;
-			assert.strictEqual(
-				evaluateApproval('mcp', 'server/tool', askPolicy('mcp'), [mcpPat]),
 				'allow',
 			);
 
@@ -137,7 +127,7 @@ suite('permission confirm matrix', () => {
 		});
 
 		test('ask + autoApprove -> skip (как Always/allow path без UI)', () => {
-			for (const action of ['edits', 'shell', 'mcp', 'web'] as const) {
+			for (const action of ['edits', 'shell', 'web'] as const) {
 				const g = resolveToolConfirmGating({
 					decision: 'ask',
 					action,
@@ -284,7 +274,7 @@ suite('permission confirm matrix', () => {
 		});
 	});
 
-	suite('registry smoke: risk -> action edits/shell/mcp/web', () => {
+	suite('registry smoke: risk -> action edits/shell/web', () => {
 		test('builtin meta risk согласован с toolActionType', () => {
 			const cases: Array<[string, string, ReturnType<typeof toolActionType>]> = [
 				['write_file', 'write', 'edits'],
@@ -292,8 +282,6 @@ suite('permission confirm matrix', () => {
 				['apply_patch', 'write', 'edits'],
 				['run_command', 'shell', 'shell'],
 				['run_tests', 'shell', 'shell'],
-				['call_mcp_tool', 'mcp', 'mcp'],
-				['list_mcp_tools', 'mcp', 'mcp'],
 				['web_search', 'web', 'web'],
 				['fetch_page', 'web', 'web'],
 			];

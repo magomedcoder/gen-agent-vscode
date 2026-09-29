@@ -1,6 +1,6 @@
 import type { GenSettings } from '../../../core/config/types';
 
-export type SettingsPageId = | 'connection' | 'chat' | 'agent' | 'security' | 'project' | 'mcp' | 'journal';
+export type SettingsPageId = | 'connection' | 'chat' | 'agent' | 'security' | 'project' | 'journal';
 
 export type SetSettingsField = <K extends keyof GenSettings>(key: K, value: GenSettings[K]) => void;
 
@@ -9,7 +9,7 @@ export interface SettingsPageProps {
 	setField: SetSettingsField;
 }
 
-export const SETTINGS_PAGE_IDS: SettingsPageId[] = ['connection', 'chat', 'agent', 'security', 'project', 'mcp', 'journal'];
+export const SETTINGS_PAGE_IDS: SettingsPageId[] = ['connection', 'chat', 'agent', 'security', 'project', 'journal'];
 
 export const SETTINGS_PAGE_CODICON: Record<SettingsPageId, string> = {
 	connection: 'plug',
@@ -17,7 +17,6 @@ export const SETTINGS_PAGE_CODICON: Record<SettingsPageId, string> = {
 	agent: 'hubot',
 	security: 'shield',
 	project: 'folder',
-	mcp: 'server',
 	journal: 'history',
 };
 
