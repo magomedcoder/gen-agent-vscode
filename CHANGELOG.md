@@ -2,7 +2,7 @@
 
 [Русская версия](CHANGELOG-ru.md)
 
-## dev (Development version)
+## 0.5.0 (30 September 2026)
 
 - **Secrets:** unified SecretStorage vault; `webSearchApiKey` no longer in JSON/settings layers (migrate + clear UI); LLM apiKey via same vault
 - **Permissions:** opt-in `persistAlwaysAllow` - Always patterns survive reloads (workspaceState); Permissions UI list/clear
@@ -29,6 +29,7 @@
 - **Shell / notify_on_output:** match only **new** job output (no false positive on prior buffer); ANSI stripped; busyDetail/partial preview while watching / on MATCH
 - **Shell / profiles:** `.gen/shell.json` env templates + named profiles (`pathPrepend`/`pathAppend`); applied on `run_command` / `run_tests` / `run_scratch` before `shell.env` hook; select via tool `profile`, `GEN_SHELL_PROFILE`, or `defaultProfile`
 - **Sessions:** `tabEvictionPolicy` (`closeOldestIdle` default / `block`) - at `maxTabCount`, new/fork/handoff closes oldest idle tabs (never current or busy)
+- **Sessions / compact:** lossless `exportArchive` persisted under ExtensionContext.storageUri (`export-archives/`); banner + `/restore-archive` to restore full history after compact; archive cleared on clear/delete/restore
 
 ## 0.4.0 (11 September 2026)
 

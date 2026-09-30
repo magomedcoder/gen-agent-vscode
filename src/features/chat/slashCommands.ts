@@ -87,6 +87,11 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
 		detailKey: 'chat.slash.compact',
 	},
 	{
+		id: 'restore-archive',
+		name: 'restore-archive',
+		detailKey: 'chat.slash.restoreArchive',
+	},
+	{
 		id: 'undo',
 		name: 'undo',
 		detailKey: 'chat.slash.undo',

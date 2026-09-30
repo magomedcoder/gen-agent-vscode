@@ -4,9 +4,9 @@
 
 Minimum VS Code version: **1.125.0**
 
-AI chat and agent in the bottom panel: **Ask** / **Agent** modes, code comments, path sandbox, `.gitignore` / `.genignore`.
+AI chat and coding agent **Gen**. Works with **llama.cpp** and any **OpenAI-compatible** API.
 
-Works with (`llama.cpp`) and any other OpenAI-compatible API.
+Read and edit code, run commands, search the repo. Ask / Agent / Plan / Debug modes, mentions, sessions, and `.gen/` for project rules. MCP is not supported.
 
 ## Documentation
 

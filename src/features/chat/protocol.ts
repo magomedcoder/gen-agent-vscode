@@ -208,6 +208,8 @@ export interface ChatViewState {
 	composerChips?: string[];
 	// Live research/subagent jobs (Teams UI)
 	researchJobs?: ResearchJobUi[];
+	// Есть lossless-архив до compact (память / диск) - баннер Restore
+	hasExportArchive?: boolean;
 }
 
 export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
@@ -331,4 +333,6 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'cleanupWorktree'; path: string }
 	| { type: 'removeWorktree'; path: string }
 	| { type: 'cleanupAllFinishedWorktrees' }
-	| { type: 'openProjectReport'; path: string };
+	| { type: 'openProjectReport'; path: string }
+	/** Восстановить полную историю из exportArchive после compact */
+	| { type: 'restoreExportArchive' };

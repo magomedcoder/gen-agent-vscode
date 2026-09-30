@@ -14,6 +14,7 @@ import { sumUsage } from '../../core/llm/usage';
 import { getSharedDiffProvider, showAgentEditDiff } from '../../host/preview/showDiff';
 import { resolveBangCommands } from './bangCommand';
 import { compactChatMessages } from './compact';
+import { deleteExportArchive, loadExportArchive, saveExportArchive } from './exportArchiveStore';
 import { completeWithContextGuard, resolveContextBudget, dropSupersededReminders } from './fitContext';
 import { computeMentionBudgetTokens, fitMentionsToBudget, weightForKind, type ContextBlock } from './fitMentionsBudget';
 import { estimateChatMessagesTokens, estimateTextTokens } from '../../core/llm/estimateTokens';
@@ -151,6 +152,10 @@ export class ChatSession {
 	};
 	private lastMentionsTruncated = false;
 	private lastMentionsTruncatedKinds: string[] = [];
+	// sessionId, для которых уже идёт async hydrate архива с диска
+	private readonly archiveHydrating = new Set<string>();
+	// Инкремент при drop - отменяет устаревший hydrate
+	private readonly archiveEpoch = new Map<string, number>();
 
 	private get messages(): ChatUiMessage[] {
 		return this.runtime.messages;
@@ -413,6 +418,7 @@ export class ChatSession {
 				const chips = this.sessions.getDraftChips();
 				return chips.length > 0 ? chips : undefined;
 			})(),
+			hasExportArchive: Boolean(this.exportArchive?.length),
 		};
 	}
 
@@ -485,13 +491,69 @@ export class ChatSession {
 			if (!rt.researchJobs) {
 				rt.researchJobs = [];
 			}
+			this.hydrateExportArchive(sessionId, rt);
 			return rt;
 		}
 
 		const stored = this.sessions.getSession(sessionId);
 		rt = createSessionRuntime(stored?.messages ?? []);
 		this.runtimes.set(sessionId, rt);
+		this.hydrateExportArchive(sessionId, rt);
 		return rt;
+	}
+
+	// Подтянуть lossless-архив с диска в runtime (один раз на sessionId)
+	private hydrateExportArchive(sessionId: string, rt: SessionRuntime): void {
+		if (rt.exportArchive?.length || this.archiveHydrating.has(sessionId)) {
+			return;
+		}
+
+		const epoch = this.archiveEpoch.get(sessionId) ?? 0;
+		this.archiveHydrating.add(sessionId);
+		void loadExportArchive(this.context, sessionId).then((msgs) => {
+			this.archiveHydrating.delete(sessionId);
+			if ((this.archiveEpoch.get(sessionId) ?? 0) !== epoch) {
+				return;
+			}
+
+			if (!msgs?.length) {
+				return;
+			}
+
+			const current = this.runtimes.get(sessionId);
+			if (!current || current.exportArchive?.length) {
+				return;
+			}
+
+			current.exportArchive = msgs;
+			if (this.sessions.getCurrentSessionId() === sessionId) {
+				this.emit();
+			}
+		});
+	}
+
+	// Первый compact: зафиксировать полную историю в памяти и на диске
+	private async captureExportArchive(source: ChatUiMessage[]): Promise<void> {
+		if (this.exportArchive?.length) {
+			return;
+		}
+
+		const cloned = cloneMessages(source);
+		this.exportArchive = cloned;
+		const sessionId = this.sessions.getCurrentSessionId();
+		await saveExportArchive(this.context, sessionId, cloned);
+	}
+
+	// Сбросить архив в памяти и на диске
+	private async dropExportArchive(sessionId: string): Promise<void> {
+		this.archiveEpoch.set(sessionId, (this.archiveEpoch.get(sessionId) ?? 0) + 1);
+		this.archiveHydrating.delete(sessionId);
+		const rt = this.runtimes.get(sessionId);
+		if (rt) {
+			rt.exportArchive = undefined;
+		}
+
+		await deleteExportArchive(this.context, sessionId);
 	}
 
 	// Сделать runtime текущим (без abort чужих runs)
@@ -642,6 +704,8 @@ export class ChatSession {
 			this.runtimes.delete(id);
 		}
 
+		void this.dropExportArchive(id);
+
 		if (!this.sessions.deleteSession(id)) {
 			return;
 		}
@@ -682,6 +746,51 @@ export class ChatSession {
 
 	async compactSession(): Promise<void> {
 		await this.runCompact();
+	}
+
+	// Вернуть полную историю из lossless-архива (после /compact)
+	async restoreExportArchive(): Promise<void> {
+		if (this.inflight) {
+			this.append({
+				id: messageId(),
+				role: 'assistant',
+				content: vscode.l10n.t('chat.compact.busy'),
+			});
+			return;
+		}
+
+		const sessionId = this.sessions.getCurrentSessionId();
+		let archive = this.exportArchive;
+		if (!archive?.length) {
+			archive = await loadExportArchive(this.context, sessionId);
+		}
+
+		if (!archive?.length) {
+			this.append({
+				id: messageId(),
+				role: 'assistant',
+				content: vscode.l10n.t('chat.restoreArchive.empty'),
+			});
+			return;
+		}
+
+		this.undoStack.push({
+			messages: cloneMessages(this.messages),
+			checkpoint: this.lastCheckpoint,
+		});
+		if (this.undoStack.length > MAX_TURN_HISTORY) {
+			this.undoStack.shift();
+		}
+
+		this.messages = cloneMessages(archive);
+		await this.dropExportArchive(sessionId);
+		this.pruneSupersededUiReminders();
+		this.persist();
+		this.append({
+			id: messageId(),
+			role: 'assistant',
+			content: vscode.l10n.t('chat.restoreArchive.done', archive.length),
+		});
 	}
 
 	private onPlanChanged(): void {
@@ -938,7 +1047,7 @@ export class ChatSession {
 		this.lastCheckpoint = undefined;
 		this.undoStack.length = 0;
 		this.redoStack.length = 0;
-		this.exportArchive = undefined;
+		void this.dropExportArchive(this.sessions.getCurrentSessionId());
 		this.messages = [];
 		this.lastTurnDiff = undefined;
 		this.stopGitSyncAutoKeep();
@@ -1864,6 +1973,11 @@ export class ChatSession {
 				return;
 			}
 
+			if (slash.command === 'restore-archive') {
+				await this.restoreExportArchive();
+				return;
+			}
+
 			if (slash.command === 'undo') {
 				const scope = slash.rest.trim().toLowerCase();
 				if (scope === 'files' || scope === 'file') {
@@ -2077,9 +2191,7 @@ export class ChatSession {
 				return false;
 			}
 
-			if (!this.exportArchive) {
-				this.exportArchive = cloneMessages(source);
-			}
+			await this.captureExportArchive(source);
 
 			const excluded = this.messages.filter((m) => excludeMessageIds.has(m.id));
 			this.messages = [...result.messages, ...excluded].slice(-MAX_STORED);
@@ -2258,10 +2370,8 @@ export class ChatSession {
 				return;
 			}
 
-			// Сохраняем полную историю только при первом compact; повторный - не перезаписывает архив
-			if (!this.exportArchive) {
-				this.exportArchive = cloneMessages(this.messages);
-			}
+			// Полная история только при первом compact; повторный - не перезаписывает архив
+			await this.captureExportArchive(this.messages);
 			this.messages = result.messages;
 			this.pruneSupersededUiReminders();
 			this.persist();

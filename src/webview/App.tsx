@@ -194,6 +194,20 @@ export function App() {
 				onLoadModels={handleLoadChatModels}
 			/>
 			<ProjectSetupBanner project={chat.project} />
+			{chat.hasExportArchive ? (
+				<div className="pause-banner" role="status">
+					<span className="pause-banner__text">{t('chat.restoreArchive.banner')}</span>
+					<span className="pause-banner__actions">
+						<button
+							type="button"
+							className="btn btn--secondary"
+							onClick={() => vscodeApi.postMessage({ type: 'restoreExportArchive' })}
+						>
+							{t('chat.restoreArchive.action')}
+						</button>
+					</span>
+				</div>
+			) : null}
 			{chat.nCtxWarn ? (
 				<div className="pause-banner pause-banner--warn" role="status">
 					<span className="pause-banner__text">{t('chat.tokens.nCtxWarnBanner')}</span>

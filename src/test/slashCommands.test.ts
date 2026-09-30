@@ -30,6 +30,18 @@ suite('slashCommands', () => {
 			rest: '',
 			custom: false,
 		});
+		assert.deepStrictEqual(parseSlashMode('/compact'), {
+			mode: undefined,
+			command: 'compact',
+			rest: '',
+			custom: false,
+		});
+		assert.deepStrictEqual(parseSlashMode('/restore-archive'), {
+			mode: undefined,
+			command: 'restore-archive',
+			rest: '',
+			custom: false,
+		});
 		assert.deepStrictEqual(parseSlashMode('/new'), {
 			mode: undefined,
 			command: 'new',
@@ -80,8 +92,9 @@ suite('slashCommands', () => {
 		assert.ok(filterSlashCommands('').length >= 10);
 		assert.deepStrictEqual(
 			filterSlashCommands('de').map((c) => c.name),
-			['debug', 'design'],
+			['debug', 'design', 'deep-planning'],
 		);
+		assert.ok(filterSlashCommands('restore').some((c) => c.name === 'restore-archive'));
 		assert.ok(filterSlashCommands('rev', [{ id: 'c', name: 'review', detail: 'x' }]).some((c) => c.name === 'review'));
 	});
 

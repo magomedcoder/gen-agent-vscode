@@ -278,6 +278,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'dismissTurnDiff':
 				this.session.dismissTurnDiff();
 				return;
+			case 'restoreExportArchive':
+				await this.session.restoreExportArchive();
+				return;
 			case 'openPath': {
 				const path = String(msg.path ?? '').trim();
 				if (!path) {
